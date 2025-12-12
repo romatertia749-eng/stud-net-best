@@ -25,19 +25,22 @@ const AppContent = () => {
     return <Loader />
   }
 
-  // Показываем ErrorScreen только если это критическая ошибка (не режим разработки)
-  const isDevMode = error && error.includes('Режим разработки')
-  if (error && !user && !isDevMode) {
+  // Всегда показываем приложение, даже в режиме разработки
+  // ErrorScreen показываем только для критических ошибок авторизации в продакшене
+  const isDevMode = error && (error.includes('Режим разработки') || error.includes('Telegram Web App не обнаружен'))
+  const isCriticalError = error && !user && !isDevMode && window.Telegram?.WebApp
+
+  if (isCriticalError) {
     return <ErrorScreen error={error} />
   }
 
   return (
     <Router>
       <div className="min-h-screen page-gradient">
-        {error && (
-          <div className="bg-yellow-500/20 border-b border-yellow-500/50 px-4 py-2">
-            <p className="text-yellow-700 text-sm text-center font-medium">
-              ⚠️ Режим разработки: {error}
+        {isDevMode && (
+          <div className="bg-blue-500/20 border-b border-blue-500/50 px-4 py-2">
+            <p className="text-blue-700 text-sm text-center font-medium">
+              ℹ️ Режим разработки: Приложение работает в демо-режиме
             </p>
           </div>
         )}
