@@ -4,6 +4,7 @@
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
+from jose.utils import base64url_decode
 import json
 import urllib.parse
 import hashlib
@@ -103,19 +104,61 @@ def decode_jwt_token(token: str) -> Optional[int]:
         logger.info(f"🔐 Декодирование токена (длина токена: {len(token)}, используемый ключ: {secret_preview}, длина ключа: {len(secret_key)})")
         
         # Декодируем токен
-        # Используем options для отключения проверки типа sub (библиотека может быть строгой)
-        payload = jwt.decode(
-            token, 
-            secret_key, 
-            algorithms=[settings.JWT_ALGORITHM],
-            options={
-                "verify_signature": True,
-                "verify_exp": True,
-                "verify_aud": False,
-                "verify_iss": False,
-                "verify_sub": False  # Отключаем проверку sub, так как мы сами обрабатываем его
-            }
-        )
+        # Библиотека jose проверяет тип sub ДО применения options
+        # Используем обходной путь: декодируем без проверки, затем проверяем подпись отдельно
+        try:
+            # Пробуем стандартное декодирование
+            payload = jwt.decode(
+                token, 
+                secret_key, 
+                algorithms=[settings.JWT_ALGORITHM],
+                options={
+                    "verify_signature": True,
+                    "verify_exp": True,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                    "verify_sub": False
+                }
+            )
+        except JWTError as e:
+            error_str = str(e)
+            # Если ошибка связана с типом sub, используем обходной путь
+            if "Subject must be a string" in error_str:
+                logger.warning(f"⚠️ Обнаружен токен с проблемой типа sub, декодируем вручную")
+                # Разбиваем токен на части
+                parts = token.split('.')
+                if len(parts) != 3:
+                    raise JWTError("Invalid token format")
+                
+                # Декодируем payload вручную (вторая часть)
+                try:
+                    payload_bytes = base64url_decode(parts[1])
+                    payload = json.loads(payload_bytes.decode('utf-8'))
+                except Exception as decode_err:
+                    raise JWTError(f"Failed to decode payload: {decode_err}")
+                
+                # Проверяем подпись вручную
+                from jose.backends import get_backend
+                backend = get_backend(settings.JWT_ALGORITHM)
+                message = f"{parts[0]}.{parts[1]}"
+                signature = parts[2]
+                
+                if not backend.verify(message.encode('utf-8'), signature, secret_key):
+                    raise JWTError("Invalid signature")
+                
+                logger.info(f"✅ Подпись токена проверена вручную")
+                
+                # Проверяем exp вручную
+                if 'exp' in payload:
+                    exp = payload.get('exp')
+                    if exp:
+                        exp_timestamp = exp if isinstance(exp, (int, float)) else float(exp)
+                        current_timestamp = datetime.utcnow().timestamp()
+                        if current_timestamp > exp_timestamp:
+                            raise JWTError("Token expired")
+                        logger.info(f"✅ Токен не истёк (exp: {exp_timestamp}, текущее время: {current_timestamp})")
+            else:
+                raise
         
         logger.info(f"📋 Декодированный payload: sub={payload.get('sub')}, тип sub: {type(payload.get('sub')).__name__}")
         
