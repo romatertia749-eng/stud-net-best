@@ -1,7 +1,7 @@
 """
 Роутер для авторизации
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional
 
@@ -24,14 +24,23 @@ class AuthResponse(BaseModel):
     user_id: int
 
 @router.post("", response_model=AuthResponse)
-async def auth(request: AuthRequest, authorization: Optional[str] = None):
+async def auth(
+    request: AuthRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
     """
     Авторизация через Telegram Web App
     
     Принимает init_data из Telegram Web App и возвращает JWT токен
     """
     # Получаем init_data из заголовка или тела запроса
-    init_data = authorization.replace("tma ", "") if authorization and authorization.startswith("tma ") else None
+    init_data = None
+    if authorization:
+        if authorization.startswith("tma "):
+            init_data = authorization.replace("tma ", "", 1).strip()
+        elif authorization.startswith("Bearer "):
+            # Если пришёл Bearer токен, это не init_data
+            pass
     
     if not init_data and request.init_data:
         init_data = request.init_data
