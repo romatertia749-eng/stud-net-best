@@ -19,7 +19,7 @@ import { fetchWithAuth } from '../utils/api'
  */
 const ProfilesPage = () => {
   // Получаем функции из контекстов для работы с мэтчами и данными пользователя
-  const { addMatch } = useMatches()
+  const { addMatch, matches } = useMatches()
   const { user, isLoading: isWebAppLoading } = useWebApp()
   const userInfo = user
   
@@ -55,7 +55,6 @@ const ProfilesPage = () => {
   // Состояние для анимации эффектов при свайпе
   const [isEffectActive, setIsEffectActive] = useState(false) // Активен ли эффект анимации
   const [effectDirection, setEffectDirection] = useState(null) // Направление эффекта: 'left' или 'right'
-  const [pendingIndexChange, setPendingIndexChange] = useState(null) // Отложенное изменение индекса
   const [lastSwipeDirection, setLastSwipeDirection] = useState(null) // Последнее направление свайпа
   
   // Refs для работы с DOM и обработки свайпов
@@ -179,7 +178,7 @@ const ProfilesPage = () => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 4000)
       
-      const url = `${API_ENDPOINTS.INCOMING_LIKES}?user_id=${userInfo.id}`
+      const url = API_ENDPOINTS.INCOMING_LIKES
       const response = await fetchWithAuth(url, {
         signal: controller.signal
       })
@@ -494,11 +493,27 @@ const ProfilesPage = () => {
   // Пока что фильтрация не реализована, просто используем все профили
   const filteredProfiles = allProfiles
 
-  // Профили, которые ещё не были свайпнуты (исключаем уже просмотренные)
-  const availableProfiles = useMemo(() => 
-    filteredProfiles.filter(profile => !swipedProfiles.includes(profile.id)),
-    [filteredProfiles, swipedProfiles]
-  )
+  // Профили, которые ещё не были свайпнуты и не являются мэтчами (исключаем уже просмотренные и мэтчи)
+  const availableProfiles = useMemo(() => {
+    // Собираем все возможные идентификаторы мэтчей (id профиля и user_id)
+    const matchProfileIds = new Set()
+    const matchUserIds = new Set()
+    matches.forEach(m => {
+      if (m.id) matchProfileIds.add(m.id)
+      if (m.user_id) matchUserIds.add(m.user_id)
+      if (m.userId) matchUserIds.add(m.userId) // Для формата из NetListPage
+    })
+    
+    return filteredProfiles.filter(profile => {
+      // Исключаем свайпнутые
+      if (swipedProfiles.includes(profile.id)) return false
+      // Исключаем мэтчи по ID профиля
+      if (matchProfileIds.has(profile.id)) return false
+      // Исключаем мэтчи по user_id
+      if (matchUserIds.has(profile.user_id)) return false
+      return true
+    })
+  }, [filteredProfiles, swipedProfiles, matches])
 
   // Определяем, какие профили показывать в зависимости от активной вкладки
   const currentProfiles = activeTab === 'incoming' 
@@ -541,19 +556,12 @@ const ProfilesPage = () => {
 
   /**
    * Вызывается когда завершается анимация эффекта при свайпе
-   * Обновляет индекс карточки и сбрасывает состояние анимации
+   * Сбрасывает состояние анимации
    */
   const handleEffectComplete = () => {
     setIsEffectActive(false)
     setEffectDirection(null)
     setSwipeOffset(0)
-    
-    // Применяем отложенное изменение индекса (после завершения анимации)
-    if (pendingIndexChange !== null) {
-      setCurrentIndex(pendingIndexChange)
-      setPendingIndexChange(null)
-    }
-    
     isProcessingSwipe.current = false // Разблокируем обработку свайпов
     
     // Прокручиваем страницу вверх для плавности
@@ -571,13 +579,35 @@ const ProfilesPage = () => {
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
     
+    // Сразу запускаем анимацию (не ждём запрос на сервер)
+    const profilesLength = activeTab === 'incoming' 
+      ? incomingLikes.length - 1 
+      : availableProfiles.length - 1
+    
+    // Запускаем анимацию эффекта свайпа вправо
+    setIsEffectActive(true)
+    setEffectDirection('right')
+    setLastSwipeDirection('right')
+    
+    // Сразу меняем индекс, чтобы запустилась exit анимация карточки
+    setCurrentIndex(prevIndex => {
+      const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
+      return activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex
+    })
+    
+    // Добавляем профиль в список свайпнутых (чтобы не показывать снова)
+    if (activeTab !== 'incoming') {
+      setSwipedProfiles(prev => [...prev, currentProfile.id])
+    }
+    
+    // Отправляем запрос на сервер асинхронно (не блокируя анимацию)
     let isMatched = false // Стал ли это мэтч (взаимный лайк)
     
     if (userInfo?.id) {
       try {
         if (activeTab === 'incoming') {
           // Для входящих лайков отправляем ответ "принять"
-          const response = await fetchWithAuth(`${API_ENDPOINTS.RESPOND_TO_LIKE}?user_id=${userInfo.id}`, {
+          const response = await fetchWithAuth(API_ENDPOINTS.RESPOND_TO_LIKE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -618,29 +648,6 @@ const ProfilesPage = () => {
       // В режиме разработки (без авторизации) просто добавляем в мэтчи
       addMatch(currentProfile)
     }
-    
-    // Добавляем профиль в список свайпнутых (чтобы не показывать снова)
-    if (activeTab !== 'incoming') {
-      setSwipedProfiles(prev => [...prev, currentProfile.id])
-    }
-    
-    // Вычисляем новый индекс для следующей карточки
-    const profilesLength = activeTab === 'incoming' 
-      ? incomingLikes.length - 1 
-      : availableProfiles.length - 1
-    
-    setCurrentIndex(prevIndex => {
-      const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
-      
-      // Запускаем анимацию эффекта свайпа вправо
-      setIsEffectActive(true)
-      setEffectDirection('right')
-      setLastSwipeDirection('right')
-      // Откладываем изменение индекса до завершения анимации
-      setPendingIndexChange(activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex)
-      
-      return prevIndex // Пока не меняем индекс (анимация ещё идёт)
-    })
   }
 
   /**
@@ -652,11 +659,33 @@ const ProfilesPage = () => {
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
     
+    // Сразу запускаем анимацию (не ждём запрос на сервер)
+    const profilesLength = activeTab === 'incoming' 
+      ? incomingLikes.length - 1 
+      : availableProfiles.length - 1
+    
+    // Запускаем анимацию эффекта свайпа влево
+    setIsEffectActive(true)
+    setEffectDirection('left')
+    setLastSwipeDirection('left')
+    
+    // Сразу меняем индекс, чтобы запустилась exit анимация карточки
+    setCurrentIndex(prevIndex => {
+      const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
+      return activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex
+    })
+    
+    // Добавляем профиль в список свайпнутых
+    if (activeTab !== 'incoming') {
+      setSwipedProfiles(prev => [...prev, currentProfile.id])
+    }
+    
+    // Отправляем запрос на сервер асинхронно (не блокируя анимацию)
     if (userInfo?.id) {
       try {
         if (activeTab === 'incoming') {
           // Для входящих лайков отправляем ответ "отклонить"
-          await fetchWithAuth(`${API_ENDPOINTS.RESPOND_TO_LIKE}?user_id=${userInfo.id}`, {
+          await fetchWithAuth(API_ENDPOINTS.RESPOND_TO_LIKE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -678,29 +707,6 @@ const ProfilesPage = () => {
         console.error('Error passing profile:', error)
       }
     }
-    
-    // Добавляем профиль в список свайпнутых
-    if (activeTab !== 'incoming') {
-      setSwipedProfiles(prev => [...prev, currentProfile.id])
-    }
-    
-    // Вычисляем новый индекс для следующей карточки
-    const profilesLength = activeTab === 'incoming' 
-      ? incomingLikes.length - 1 
-      : availableProfiles.length - 1
-    
-    setCurrentIndex(prevIndex => {
-      const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
-      
-      // Запускаем анимацию эффекта свайпа влево
-      setIsEffectActive(true)
-      setEffectDirection('left')
-      setLastSwipeDirection('left')
-      // Откладываем изменение индекса до завершения анимации
-      setPendingIndexChange(activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex)
-      
-      return prevIndex // Пока не меняем индекс (анимация ещё идёт)
-    })
   }
 
   /**

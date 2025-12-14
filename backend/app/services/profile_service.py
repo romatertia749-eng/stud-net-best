@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import datetime
 import json
 
-from app.database import Profile, Swipe
+from app.database import Profile, Swipe, Match
 from app.services.file_storage import save_uploaded_file, delete_file
 from fastapi import UploadFile, HTTPException
 from config import settings
@@ -40,13 +40,31 @@ def get_profiles_for_swipe(db: Session, user_id: int, page: int = 0, size: int =
         Swipe.user_id == user_id
     ).subquery()
     
-    # Получаем профили, которые ещё не были свайпнуты
-    profiles = db.query(Profile).filter(
+    # Получаем user_id пользователей, с которыми есть мэтч
+    # Мэтч может быть где user1_id = user_id или user2_id = user_id
+    matched_user_ids_1 = db.query(Match.user2_id).filter(Match.user1_id == user_id).all()
+    matched_user_ids_2 = db.query(Match.user1_id).filter(Match.user2_id == user_id).all()
+    matched_user_ids = [row[0] for row in matched_user_ids_1] + [row[0] for row in matched_user_ids_2]
+    
+    # Получаем ID профилей мэтчей (не user_id, а profile.id)
+    matched_profile_ids = []
+    if matched_user_ids:
+        matched_profiles = db.query(Profile.id).filter(Profile.user_id.in_(matched_user_ids)).all()
+        matched_profile_ids = [p[0] for p in matched_profiles]
+    
+    # Получаем профили, которые ещё не были свайпнуты и не являются мэтчами
+    query = db.query(Profile).filter(
         Profile.is_active == True,
         Profile.deleted_at == None,
         Profile.user_id != user_id,
         ~Profile.id.in_(swiped_profile_ids)
-    ).order_by(Profile.created_at.desc()).offset(page * size).limit(size).all()
+    )
+    
+    # Исключаем мэтчи, если они есть
+    if matched_profile_ids:
+        query = query.filter(~Profile.id.in_(matched_profile_ids))
+    
+    profiles = query.order_by(Profile.created_at.desc()).offset(page * size).limit(size).all()
     
     return profiles
 
