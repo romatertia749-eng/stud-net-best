@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine, Column, BigInteger, String, Integer, Boolean, Text, DateTime, JSON as SQLJSON, CheckConstraint, func, and_, or_, exists
+from sqlalchemy import create_engine, Column, BigInteger, String, Integer, Boolean, Text, DateTime, JSON as SQLJSON, CheckConstraint, func, and_, or_, exists, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.dialects.postgresql import JSONB
@@ -100,7 +100,32 @@ class Match(Base):
     matched_at = Column(DateTime, default=datetime.utcnow)
 
 # Создание таблиц (если их ещё нет)
+# ВАЖНО: Base.metadata.create_all создаёт только базовые таблицы
+# Для полной функциональности нужно применить schema.sql вручную в базе данных
+# Это создаст индексы, триггеры, функции и представления
 Base.metadata.create_all(bind=engine)
+
+# Проверка подключения к БД при старте
+def check_database_connection():
+    """Проверяет подключение к базе данных при старте"""
+    try:
+        db = SessionLocal()
+        try:
+            # Простая проверка - пытаемся выполнить запрос
+            db.execute(text("SELECT 1"))
+            db.commit()
+            print("✅ База данных подключена успешно")
+        except Exception as e:
+            print(f"⚠️  WARNING: Проблема с базой данных: {e}")
+            print("⚠️  Убедитесь, что schema.sql применён к базе данных Neon")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"❌ Ошибка подключения к базе данных: {e}")
+        print("⚠️  Проверьте DATABASE_URL в переменных окружения Koyeb")
+
+# Выполняем проверку при импорте модуля
+check_database_connection()
 
 # Зависимости
 def get_db():
