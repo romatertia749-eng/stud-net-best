@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import PropTypes from 'prop-types'
 
+/**
+ * MultiSelect - компонент множественного выбора
+ * 
+ * Позволяет выбрать несколько опций из списка
+ * Поддерживает добавление собственных вариантов
+ */
 const MultiSelect = ({ options, selected, onChange, placeholder, onAddCustom, className = '' }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const [customValue, setCustomValue] = useState('')
-  const [showCustomInput, setShowCustomInput] = useState(false)
-  const wrapperRef = useRef(null)
+  const [isOpen, setIsOpen] = useState(false) // Открыт ли dropdown
+  const [customValue, setCustomValue] = useState('') // Значение для кастомного варианта
+  const [showCustomInput, setShowCustomInput] = useState(false) // Показывать ли input для кастомного варианта
+  const wrapperRef = useRef(null) // Ссылка на контейнер (для закрытия при клике вне)
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -26,14 +32,22 @@ const MultiSelect = ({ options, selected, onChange, placeholder, onAddCustom, cl
     }
   }, [isOpen])
 
+  /**
+   * Переключает выбор опции (добавляет/удаляет из selected)
+   */
   const handleToggle = (option) => {
     if (selected.includes(option)) {
+      // Если опция уже выбрана, удаляем её
       onChange(selected.filter(item => item !== option))
     } else {
+      // Если опция не выбрана, добавляем её
       onChange([...selected, option])
     }
   }
 
+  /**
+   * Добавляет кастомный вариант в список выбранных
+   */
   const handleAddCustom = () => {
     if (customValue.trim() && !selected.includes(customValue.trim())) {
       onAddCustom(customValue.trim())
@@ -42,6 +56,9 @@ const MultiSelect = ({ options, selected, onChange, placeholder, onAddCustom, cl
     }
   }
 
+  /**
+   * Удаляет элемент из списка выбранных
+   */
   const removeItem = (item) => {
     onChange(selected.filter(i => i !== item))
   }

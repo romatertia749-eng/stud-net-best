@@ -1,7 +1,15 @@
 import { motion } from 'framer-motion'
 import PropTypes from 'prop-types'
 
+/**
+ * EffectOverlay - компонент для визуальных эффектов при свайпе
+ * 
+ * Показывает анимацию при свайпе карточки:
+ * - Вправо: градиентная волна
+ * - Влево: частицы, разлетающиеся в стороны
+ */
 const EffectOverlay = ({ direction, onComplete }) => {
+  // Создаём массив частиц для анимации свайпа влево
   const particles = Array.from({ length: 20 }, (_, i) => i)
 
   return (

@@ -2,9 +2,19 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Card, Button } from '../components'
 
+/**
+ * HomePage - главная страница приложения
+ * 
+ * Показывается когда у пользователя ещё нет профиля
+ * Содержит призыв к действию для создания профиля
+ */
 const HomePage = () => {
   const navigate = useNavigate()
 
+  /**
+   * Обработчик кнопки создания профиля
+   * Перенаправляет на страницу создания профиля
+   */
   const handleCreateProfile = () => {
     navigate('/profile')
   }

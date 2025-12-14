@@ -1,27 +1,38 @@
 import { useState, useRef, useEffect } from 'react'
 import PropTypes from 'prop-types'
 
+/**
+ * Autocomplete - компонент автодополнения
+ * 
+ * Позволяет вводить текст и выбирать из списка опций
+ * Автоматически фильтрует опции по введённому тексту
+ */
 const Autocomplete = ({ options, value, onChange, placeholder, className = '' }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const [filteredOptions, setFilteredOptions] = useState(options)
-  const [inputValue, setInputValue] = useState(value || '')
-  const wrapperRef = useRef(null)
+  const [isOpen, setIsOpen] = useState(false) // Открыт ли dropdown
+  const [filteredOptions, setFilteredOptions] = useState(options) // Отфильтрованные опции
+  const [inputValue, setInputValue] = useState(value || '') // Значение в input
+  const wrapperRef = useRef(null) // Ссылка на контейнер (для закрытия при клике вне)
 
+  // Синхронизируем inputValue с внешним value
   useEffect(() => {
     setInputValue(value || '')
   }, [value])
 
+  // Фильтруем опции при изменении введённого текста
   useEffect(() => {
     if (inputValue) {
+      // Фильтруем опции, которые содержат введённый текст (без учёта регистра)
       const filtered = options.filter(opt =>
         opt.toLowerCase().includes(inputValue.toLowerCase())
       )
       setFilteredOptions(filtered)
     } else {
+      // Если текст пустой, показываем все опции
       setFilteredOptions(options)
     }
   }, [inputValue, options])
 
+  // Закрываем dropdown при клике вне компонента
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -40,17 +51,25 @@ const Autocomplete = ({ options, value, onChange, placeholder, className = '' })
     }
   }, [isOpen])
 
+  /**
+   * Обработчик изменения текста в input
+   * Открывает dropdown и вызывает onChange
+   */
   const handleInputChange = (e) => {
     const newValue = e.target.value
     setInputValue(newValue)
-    setIsOpen(true)
-    onChange(newValue)
+    setIsOpen(true) // Открываем dropdown при вводе
+    onChange(newValue) // Уведомляем родителя об изменении
   }
 
+  /**
+   * Обработчик выбора опции из списка
+   * Устанавливает выбранное значение и закрывает dropdown
+   */
   const handleSelect = (option) => {
     setInputValue(option)
     onChange(option)
-    setIsOpen(false)
+    setIsOpen(false) // Закрываем dropdown после выбора
   }
 
   return (

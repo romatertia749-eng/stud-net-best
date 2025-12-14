@@ -5,13 +5,20 @@ import { useWebApp } from '../contexts/WebAppContext'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
 import { getAuthToken } from '../utils/api'
 
+/**
+ * UserCardPage - страница просмотра профиля другого пользователя
+ * 
+ * Показывает полную информацию о пользователе и позволяет:
+ * - Перейти в чат (если есть мэтч)
+ * - Вернуться к списку анкет
+ */
 const UserCardPage = () => {
-  const { id } = useParams()
+  const { id } = useParams() // ID профиля из URL
   const navigate = useNavigate()
   const { user, jwt } = useWebApp()
-  const [isMatched, setIsMatched] = useState(false)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [isMatched, setIsMatched] = useState(false) // Произошёл ли мэтч
+  const [profile, setProfile] = useState(null) // Данные профиля
+  const [loading, setLoading] = useState(false) // Загрузка профиля
 
   useEffect(() => {
     if (!id) {

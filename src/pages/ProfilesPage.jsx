@@ -7,42 +7,71 @@ import { useWebApp } from '../contexts/WebAppContext'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
 import { fetchWithAuth } from '../utils/api'
 
+/**
+ * ProfilesPage - главная страница для просмотра и свайпа анкет пользователей
+ * 
+ * Основная функциональность:
+ * - Показывает анкеты других пользователей в формате карточек (как в Tinder)
+ * - Поддерживает свайп влево (пропустить) и вправо (лайк)
+ * - Фильтрация по городу, университету и интересам
+ * - Две вкладки: "Все анкеты" и "Входящие коннекты" (те, кто лайкнул тебя)
+ * - Кэширование данных в localStorage для быстрой загрузки
+ */
 const ProfilesPage = () => {
+  // Получаем функции из контекстов для работы с мэтчами и данными пользователя
   const { addMatch } = useMatches()
   const { user, isLoading: isWebAppLoading } = useWebApp()
   const userInfo = user
   
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [swipedProfiles, setSwipedProfiles] = useState([])
+  // Состояние для управления текущей карточкой
+  const [currentIndex, setCurrentIndex] = useState(0) // Индекс текущей карточки в массиве
+  const [swipedProfiles, setSwipedProfiles] = useState([]) // ID профилей, которые уже свайпнули
+  
+  // Состояние для фильтров
   const [selectedCity, setSelectedCity] = useState('')
   const [selectedUniversity, setSelectedUniversity] = useState('')
   const [selectedInterests, setSelectedInterests] = useState([])
-  const [showFilters, setShowFilters] = useState(false)
-  const [swipeOffset, setSwipeOffset] = useState(0)
-  const [allProfiles, setAllProfiles] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [showSwipeTutorial, setShowSwipeTutorial] = useState(false)
-  const [activeTab, setActiveTab] = useState('all')
+  const [showFilters, setShowFilters] = useState(false) // Показывать/скрывать панель фильтров
+  
+  // Состояние для свайпа (анимация и позиция карточки)
+  const [swipeOffset, setSwipeOffset] = useState(0) // Смещение карточки при свайпе (в пикселях)
+  
+  // Состояние для данных профилей
+  const [allProfiles, setAllProfiles] = useState([]) // Все загруженные профили
+  const [loading, setLoading] = useState(false) // Загрузка основных профилей
+  
+  // Состояние для туториала
+  const [showSwipeTutorial, setShowSwipeTutorial] = useState(false) // Показывать ли обучение свайпу
+  
+  // Состояние для вкладок
+  const [activeTab, setActiveTab] = useState('all') // 'all' или 'incoming'
+  
+  // Состояние для входящих лайков (те, кто лайкнул тебя)
   const [incomingLikes, setIncomingLikes] = useState([])
   const [loadingIncoming, setLoadingIncoming] = useState(false)
-  const [incomingError, setIncomingError] = useState(null)
-  const [showIncomingTip, setShowIncomingTip] = useState(false)
+  const [incomingError, setIncomingError] = useState(null) // Ошибка загрузки входящих
+  const [showIncomingTip, setShowIncomingTip] = useState(false) // Подсказка для входящих
   
-  const [isEffectActive, setIsEffectActive] = useState(false)
-  const [effectDirection, setEffectDirection] = useState(null)
-  const [pendingIndexChange, setPendingIndexChange] = useState(null)
-  const [lastSwipeDirection, setLastSwipeDirection] = useState(null)
+  // Состояние для анимации эффектов при свайпе
+  const [isEffectActive, setIsEffectActive] = useState(false) // Активен ли эффект анимации
+  const [effectDirection, setEffectDirection] = useState(null) // Направление эффекта: 'left' или 'right'
+  const [pendingIndexChange, setPendingIndexChange] = useState(null) // Отложенное изменение индекса
+  const [lastSwipeDirection, setLastSwipeDirection] = useState(null) // Последнее направление свайпа
   
-  const cardRef = useRef(null)
-  const touchStartX = useRef(0)
-  const touchStartY = useRef(0)
-  const touchEndX = useRef(0)
-  const touchEndY = useRef(0)
-  const isProcessingSwipe = useRef(false)
-  const rafId = useRef(null)
+  // Refs для работы с DOM и обработки свайпов
+  const cardRef = useRef(null) // Ссылка на DOM элемент карточки
+  const touchStartX = useRef(0) // X координата начала касания
+  const touchStartY = useRef(0) // Y координата начала касания
+  const touchEndX = useRef(0) // X координата конца касания
+  const touchEndY = useRef(0) // Y координата конца касания
+  const isProcessingSwipe = useRef(false) // Флаг: обрабатывается ли сейчас свайп (чтобы не дублировать)
+  const rafId = useRef(null) // ID для requestAnimationFrame (для плавной анимации)
 
+  // Готовность приложения (когда загрузились данные пользователя)
   const isReady = !isWebAppLoading
 
+  // При первой загрузке пытаемся загрузить кэшированные профили из localStorage
+  // Это позволяет быстро показать данные без ожидания запроса к серверу
   useEffect(() => {
     const lastUserId = localStorage.getItem('last_user_id')
     if (lastUserId) {
@@ -51,8 +80,11 @@ const ProfilesPage = () => {
       if (cached) {
         try {
           const cachedData = JSON.parse(cached)
+          // Проверяем, не истёк ли кэш (данные актуальны 10 минут)
           if (cachedData.expires > Date.now() && Array.isArray(cachedData.profiles)) {
+            // Обрабатываем профили: парсим JSON строки в массивы для interests и goals
             const processedProfiles = cachedData.profiles.map(profile => {
+              // Парсим interests (может быть массивом или JSON строкой)
               let interestsArray = []
               if (profile.interests) {
                 if (Array.isArray(profile.interests)) {
@@ -62,6 +94,7 @@ const ProfilesPage = () => {
                 }
               }
               
+              // Парсим goals (может быть массивом или JSON строкой)
               let goalsArray = []
               if (profile.goals) {
                 if (Array.isArray(profile.goals)) {
@@ -71,6 +104,7 @@ const ProfilesPage = () => {
                 }
               }
               
+              // Формируем объект профиля с правильными типами данных
               return {
                 ...profile,
                 interests: interestsArray,
@@ -84,12 +118,14 @@ const ProfilesPage = () => {
             setLoading(false)
           }
         } catch (e) {
+          // Если кэш повреждён, удаляем его
           localStorage.removeItem(cacheKey)
         }
       }
     }
   }, [])
 
+  // Показываем туториал по свайпу только один раз (при первом посещении)
   useEffect(() => {
     if (!isReady) return
     
@@ -99,14 +135,17 @@ const ProfilesPage = () => {
     }
   }, [isReady])
 
+  // Когда показывается туториал, скрываем header и bottomNav, блокируем скролл
+  // Это нужно для полноэкранного показа туториала
   useEffect(() => {
     if (showSwipeTutorial) {
-      document.body.style.overflow = 'hidden'
+      document.body.style.overflow = 'hidden' // Блокируем скролл страницы
       const header = document.querySelector('header')
       const bottomNav = document.querySelector('nav')
-      if (header) header.style.display = 'none'
-      if (bottomNav) bottomNav.style.display = 'none'
+      if (header) header.style.display = 'none' // Скрываем шапку
+      if (bottomNav) bottomNav.style.display = 'none' // Скрываем нижнюю навигацию
     } else {
+      // Восстанавливаем всё обратно
       document.body.style.overflow = ''
       const header = document.querySelector('header')
       const bottomNav = document.querySelector('nav')
@@ -114,6 +153,7 @@ const ProfilesPage = () => {
       if (bottomNav) bottomNav.style.display = ''
     }
     
+    // Cleanup: при размонтировании компонента восстанавливаем всё
     return () => {
       document.body.style.overflow = ''
       const header = document.querySelector('header')
@@ -123,6 +163,10 @@ const ProfilesPage = () => {
     }
   }, [showSwipeTutorial])
 
+  /**
+   * Загружает список пользователей, которые лайкнули текущего пользователя
+   * Это вкладка "Входящие коннекты"
+   */
   const fetchIncomingLikes = async () => {
     if (!userInfo?.id) return
     
@@ -131,6 +175,7 @@ const ProfilesPage = () => {
     setIncomingLikes([])
     
     try {
+      // Устанавливаем таймаут 4 секунды для запроса
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 4000)
       
@@ -143,8 +188,10 @@ const ProfilesPage = () => {
         
       if (response.ok) {
         const data = await response.json()
+        // Обрабатываем разные форматы ответа от сервера
         const profiles = Array.isArray(data.content) ? data.content : (Array.isArray(data) ? data : [])
         
+        // Обрабатываем каждый профиль: парсим JSON строки в массивы
         const processedProfiles = profiles.map(profile => {
           let interestsArray = []
           if (profile.interests) {
@@ -175,15 +222,18 @@ const ProfilesPage = () => {
         setIncomingLikes(processedProfiles)
         setCurrentIndex(0)
         
+        // Показываем подсказку для входящих лайков только один раз
         const hasSeenIncomingTip = localStorage.getItem('maxnet_incoming_tip_seen')
         if (!hasSeenIncomingTip && processedProfiles.length > 0) {
           setShowIncomingTip(true)
         }
       } else if (response.status === 404) {
+        // Эндпоинт не реализован на бэкенде
         setIncomingLikes([])
         setIncomingError('not_implemented')
         setCurrentIndex(0)
       } else {
+        // Ошибка загрузки
         setIncomingError('load_error')
         setIncomingLikes([])
         setCurrentIndex(0)
@@ -201,6 +251,7 @@ const ProfilesPage = () => {
     }
   }
 
+  // При переключении на вкладку "Входящие коннекты" загружаем входящие лайки
   useEffect(() => {
     if (activeTab === 'incoming' && isReady && userInfo?.id) {
       setSwipedProfiles([])
@@ -209,22 +260,31 @@ const ProfilesPage = () => {
     }
   }, [activeTab, isReady, userInfo?.id])
 
+  /**
+   * Основной эффект для загрузки профилей с сервера
+   * Загружает профили при:
+   * - Первой загрузке страницы
+   * - Изменении фильтров (город, университет, интересы)
+   * - Переключении вкладок
+   */
   useEffect(() => {
     if (!isReady || !userInfo?.id) {
       if (!userInfo?.id) setLoading(false)
       return
     }
     
+    // Не загружаем основные профили, если открыта вкладка "Входящие"
     if (activeTab === 'incoming') {
       return
     }
     
-    let isMounted = true
-    let controller = null
+    let isMounted = true // Флаг для проверки, не размонтирован ли компонент
+    let controller = null // AbortController для отмены запроса
     
     const fetchProfiles = async () => {
       if (!isMounted) return
       
+      // Проверяем кэш в localStorage
       const cacheKey = `profiles_${userInfo.id}`
       const cached = localStorage.getItem(cacheKey)
       let hasValidCache = false
@@ -232,9 +292,12 @@ const ProfilesPage = () => {
       if (cached) {
         try {
           const cachedData = JSON.parse(cached)
+          // Если кэш актуален (не истёк) и содержит валидные данные
           if (cachedData.expires > Date.now() && Array.isArray(cachedData.profiles)) {
             hasValidCache = true
+            // Загружаем из кэша только если у нас ещё нет профилей
             if (allProfiles.length === 0) {
+              // Обрабатываем профили: парсим JSON строки
               const processedProfiles = cachedData.profiles.map(profile => {
                 let interestsArray = []
                 if (profile.interests) {
@@ -272,19 +335,22 @@ const ProfilesPage = () => {
         }
       }
       
+      // Формируем URL для запроса (убираем лишний слэш в конце)
       const baseUrl = API_ENDPOINTS.PROFILES.endsWith('/') 
         ? API_ENDPOINTS.PROFILES.slice(0, -1) 
         : API_ENDPOINTS.PROFILES
       const url = `${baseUrl}?user_id=${userInfo.id}&page=0&size=50`
       
+      // Показываем индикатор загрузки только если нет валидного кэша
       if (!hasValidCache) {
         setLoading(true)
       } else if (cached) {
+        // Если кэш очень свежий (меньше минуты), не делаем запрос
         try {
           const cachedData = JSON.parse(cached)
           const cacheAge = Date.now() - (cachedData.expires - 10 * 60 * 1000)
           if (cacheAge < 60 * 1000) {
-            return
+            return // Кэш слишком свежий, не обновляем
           }
         } catch (e) {}
       }
@@ -423,19 +489,23 @@ const ProfilesPage = () => {
     }
   }, [isReady, userInfo?.id, activeTab, selectedCity, selectedUniversity, selectedInterests])
 
+  // Пока что фильтрация не реализована, просто используем все профили
   const filteredProfiles = allProfiles
 
+  // Профили, которые ещё не были свайпнуты (исключаем уже просмотренные)
   const availableProfiles = useMemo(() => 
     filteredProfiles.filter(profile => !swipedProfiles.includes(profile.id)),
     [filteredProfiles, swipedProfiles]
   )
 
+  // Определяем, какие профили показывать в зависимости от активной вкладки
   const currentProfiles = activeTab === 'incoming' 
-    ? (loadingIncoming ? [] : incomingLikes) 
-    : availableProfiles
+    ? (loadingIncoming ? [] : incomingLikes) // Входящие лайки
+    : availableProfiles // Обычные профили
   
+  // Безопасный индекс (чтобы не выйти за границы массива)
   const safeIndex = currentIndex >= 0 && currentIndex < currentProfiles.length ? currentIndex : 0
-  const currentProfile = currentProfiles[safeIndex]
+  const currentProfile = currentProfiles[safeIndex] // Текущая карточка для отображения
   
   useEffect(() => {
     setCurrentIndex(0)
@@ -458,40 +528,53 @@ const ProfilesPage = () => {
     }
   }, [currentIndex, availableProfiles.length])
 
+  // Сброс всех фильтров
   const handleResetFilters = () => {
     setSelectedCity('')
     setSelectedUniversity('')
     setSelectedInterests([])
-    setSwipedProfiles([])
-    setCurrentIndex(0)
+    setSwipedProfiles([]) // Сбрасываем список свайпнутых
+    setCurrentIndex(0) // Возвращаемся к первой карточке
   }
 
+  /**
+   * Вызывается когда завершается анимация эффекта при свайпе
+   * Обновляет индекс карточки и сбрасывает состояние анимации
+   */
   const handleEffectComplete = () => {
     setIsEffectActive(false)
     setEffectDirection(null)
     setSwipeOffset(0)
     
+    // Применяем отложенное изменение индекса (после завершения анимации)
     if (pendingIndexChange !== null) {
       setCurrentIndex(pendingIndexChange)
       setPendingIndexChange(null)
     }
     
-    isProcessingSwipe.current = false
+    isProcessingSwipe.current = false // Разблокируем обработку свайпов
     
+    // Прокручиваем страницу вверх для плавности
     requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'instant' })
     })
   }
 
+  /**
+   * Обработчик лайка (свайп вправо)
+   * Отправляет запрос на сервер и показывает анимацию
+   */
   const handleLike = async () => {
+    // Защита от двойного срабатывания
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
     
-    let isMatched = false
+    let isMatched = false // Стал ли это мэтч (взаимный лайк)
     
     if (userInfo?.id) {
       try {
         if (activeTab === 'incoming') {
+          // Для входящих лайков отправляем ответ "принять"
           const response = await fetchWithAuth(`${API_ENDPOINTS.RESPOND_TO_LIKE}?user_id=${userInfo.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -503,10 +586,12 @@ const ProfilesPage = () => {
           
           if (response.ok) {
             await response.json()
-            isMatched = true
+            isMatched = true // Принятие входящего лайка = мэтч
+            // Удаляем из списка входящих
             setIncomingLikes(prev => prev.filter(p => p.id !== currentProfile.id))
           }
         } else {
+          // Для обычных профилей отправляем лайк
           const response = await fetchWithAuth(API_ENDPOINTS.LIKE_PROFILE(currentProfile.id), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -515,7 +600,7 @@ const ProfilesPage = () => {
           
           if (response.ok) {
             const data = await response.json()
-            if (data.matched) isMatched = true
+            if (data.matched) isMatched = true // Сервер сообщил о мэтче
           }
         }
       } catch (error) {
@@ -523,17 +608,21 @@ const ProfilesPage = () => {
       }
     }
     
+    // Если произошёл мэтч, добавляем в список мэтчей и показываем уведомление
     if (isMatched) {
       addMatch(currentProfile)
       alert('Вы замэтчились! 🎉')
     } else if (!userInfo?.id) {
+      // В режиме разработки (без авторизации) просто добавляем в мэтчи
       addMatch(currentProfile)
     }
     
+    // Добавляем профиль в список свайпнутых (чтобы не показывать снова)
     if (activeTab !== 'incoming') {
       setSwipedProfiles(prev => [...prev, currentProfile.id])
     }
     
+    // Вычисляем новый индекс для следующей карточки
     const profilesLength = activeTab === 'incoming' 
       ? incomingLikes.length - 1 
       : availableProfiles.length - 1
@@ -541,22 +630,30 @@ const ProfilesPage = () => {
     setCurrentIndex(prevIndex => {
       const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
       
+      // Запускаем анимацию эффекта свайпа вправо
       setIsEffectActive(true)
       setEffectDirection('right')
       setLastSwipeDirection('right')
+      // Откладываем изменение индекса до завершения анимации
       setPendingIndexChange(activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex)
       
-      return prevIndex
+      return prevIndex // Пока не меняем индекс (анимация ещё идёт)
     })
   }
 
+  /**
+   * Обработчик пропуска (свайп влево)
+   * Отправляет запрос на сервер о том, что пользователь пропустил профиль
+   */
   const handlePass = async () => {
+    // Защита от двойного срабатывания
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
     
     if (userInfo?.id) {
       try {
         if (activeTab === 'incoming') {
+          // Для входящих лайков отправляем ответ "отклонить"
           await fetchWithAuth(`${API_ENDPOINTS.RESPOND_TO_LIKE}?user_id=${userInfo.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -565,8 +662,10 @@ const ProfilesPage = () => {
               action: 'decline'
             }),
           })
+          // Удаляем из списка входящих
           setIncomingLikes(prev => prev.filter(p => p.id !== currentProfile.id))
         } else {
+          // Для обычных профилей отправляем "pass"
           await fetchWithAuth(API_ENDPOINTS.PASS_PROFILE(currentProfile.id), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -578,10 +677,12 @@ const ProfilesPage = () => {
       }
     }
     
+    // Добавляем профиль в список свайпнутых
     if (activeTab !== 'incoming') {
       setSwipedProfiles(prev => [...prev, currentProfile.id])
     }
     
+    // Вычисляем новый индекс для следующей карточки
     const profilesLength = activeTab === 'incoming' 
       ? incomingLikes.length - 1 
       : availableProfiles.length - 1
@@ -589,33 +690,47 @@ const ProfilesPage = () => {
     setCurrentIndex(prevIndex => {
       const nextIndex = prevIndex < profilesLength ? prevIndex + 1 : prevIndex
       
+      // Запускаем анимацию эффекта свайпа влево
       setIsEffectActive(true)
       setEffectDirection('left')
       setLastSwipeDirection('left')
+      // Откладываем изменение индекса до завершения анимации
       setPendingIndexChange(activeTab === 'incoming' ? Math.min(prevIndex, Math.max(0, profilesLength - 1)) : nextIndex)
       
-      return prevIndex
+      return prevIndex // Пока не меняем индекс (анимация ещё идёт)
     })
   }
 
+  /**
+   * Обработчик начала касания (для свайпа на мобильных устройствах)
+   * Сохраняет начальные координаты касания
+   */
   const handleTouchStart = (e) => {
+    // Блокируем свайп, если идёт анимация или обработка
     if (isEffectActive || isProcessingSwipe.current) {
       e.preventDefault()
       return
     }
     
+    // Сохраняем координаты начала касания
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
-    setSwipeOffset(0)
+    setSwipeOffset(0) // Сбрасываем смещение
   }
 
+  /**
+   * Обработчик движения пальца при свайпе
+   * Обновляет позицию карточки в реальном времени
+   */
   const handleTouchMove = (e) => {
     if (isEffectActive || !touchStartX.current || isProcessingSwipe.current) return
     
+    // Отменяем предыдущий кадр анимации, если он был
     if (rafId.current) {
       cancelAnimationFrame(rafId.current)
     }
     
+    // Используем requestAnimationFrame для плавной анимации
     rafId.current = requestAnimationFrame(() => {
       touchEndX.current = e.touches[0].clientX
       touchEndY.current = e.touches[0].clientY
@@ -623,11 +738,13 @@ const ProfilesPage = () => {
       const deltaX = touchEndX.current - touchStartX.current
       const deltaY = touchEndY.current - touchStartY.current
       
+      // Если движение больше по горизонтали, чем по вертикали - это свайп
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        setSwipeOffset(deltaX)
+        setSwipeOffset(deltaX) // Обновляем смещение карточки
       }
     })
     
+    // Предотвращаем скролл страницы при горизонтальном свайпе
     const deltaX = e.touches[0].clientX - touchStartX.current
     const deltaY = e.touches[0].clientY - touchStartY.current
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
@@ -635,8 +752,13 @@ const ProfilesPage = () => {
     }
   }
 
+  /**
+   * Обработчик окончания касания
+   * Определяет, был ли это свайп, и вызывает соответствующий обработчик
+   */
   const handleTouchEnd = () => {
     if (isEffectActive || isProcessingSwipe.current) {
+      // Сбрасываем всё, если идёт обработка
       setSwipeOffset(0)
       touchStartX.current = 0
       touchStartY.current = 0
@@ -650,20 +772,26 @@ const ProfilesPage = () => {
       return
     }
     
+    // Вычисляем расстояние свайпа
     const deltaX = touchEndX.current - touchStartX.current
     const deltaY = touchEndY.current - touchStartY.current
-    const minSwipeDistance = 50
+    const minSwipeDistance = 50 // Минимальное расстояние для регистрации свайпа
 
+    // Проверяем, был ли это свайп (горизонтальный и достаточной длины)
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
       if (deltaX < 0) {
+        // Свайп влево = пропустить
         handlePass()
       } else {
+        // Свайп вправо = лайк
         handleLike()
       }
     } else {
+      // Свайп был слишком коротким, возвращаем карточку на место
       setSwipeOffset(0)
     }
     
+    // Сбрасываем координаты
     touchStartX.current = 0
     touchStartY.current = 0
     touchEndX.current = 0

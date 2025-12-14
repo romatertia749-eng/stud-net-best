@@ -2,6 +2,13 @@ import { motion } from 'framer-motion'
 import PropTypes from 'prop-types'
 import { icons } from '../assets/icons'
 
+/**
+ * Header - компонент шапки приложения
+ * 
+ * Отображает:
+ * - Логотип и название приложения
+ * - Количество коннектов и статус
+ */
 const Header = ({
   appName = 'StudNet',
   connectionsCount = 0,

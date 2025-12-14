@@ -4,6 +4,13 @@ import { motion } from 'framer-motion'
 import PropTypes from 'prop-types'
 import { icons } from '../assets/icons'
 
+/**
+ * BottomNav - компонент нижней навигации
+ * 
+ * Отображает иконки для перехода между основными разделами приложения
+ */
+
+// Элементы навигации
 const navItems = [
   {
     path: '/profile',
@@ -25,6 +32,9 @@ const navItems = [
   }
 ]
 
+/**
+ * Компонент для отображения fallback иконки, если основная не загрузилась
+ */
 const IconFallback = ({ name }) => {
   const icons = {
     profile: (
@@ -50,11 +60,17 @@ IconFallback.propTypes = {
   name: PropTypes.string.isRequired
 }
 
+/**
+ * NavItem - элемент навигации
+ * 
+ * Отображает иконку и подпись, с анимацией для активного состояния
+ */
 const NavItem = ({ item, isActive }) => {
-  const [useFallback, setUseFallback] = useState(false)
+  const [useFallback, setUseFallback] = useState(false) // Использовать ли fallback иконку
 
   return (
     <>
+      {/* Анимированный фон для активной вкладки */}
       {isActive && (
         <motion.div
           layoutId="activeTab"
@@ -91,10 +107,16 @@ NavItem.propTypes = {
   isActive: PropTypes.bool.isRequired
 }
 
+/**
+ * BottomNav - компонент нижней навигации
+ * 
+ * Фиксированная панель внизу экрана с навигацией между разделами
+ */
 const BottomNav = ({ className = '' }) => {
   return (
     <nav className={`fixed bottom-0 left-0 right-0 z-50 bg-white/20 backdrop-blur-md border-t border-white/20 shadow-lg safe-area-inset-bottom ${className}`}>
       <div className="flex items-center px-2 py-2">
+        {/* Рендерим все элементы навигации */}
         {navItems.map((item, index) => (
           <NavLink
             key={item.path}
@@ -113,7 +135,7 @@ const BottomNav = ({ className = '' }) => {
           </NavLink>
         ))}
       </div>
-      {/* Безопасная зона для устройств с вырезом */}
+      {/* Безопасная зона для устройств с вырезом (iPhone X и новее) */}
       <div className="h-safe-area-inset-bottom bg-transparent" />
     </nav>
   )

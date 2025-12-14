@@ -1,7 +1,18 @@
 import { createContext, useContext, useState } from 'react'
 
+/**
+ * MatchContext - контекст для управления мэтчами (взаимными лайками)
+ * 
+ * Предоставляет:
+ * - matches - список мэтчей
+ * - addMatch - добавить мэтч
+ * - removeMatch - удалить мэтч
+ */
 const MatchContext = createContext(null)
 
+/**
+ * Хук для использования MatchContext
+ */
 export const useMatches = () => {
   const context = useContext(MatchContext)
   if (!context) {
@@ -10,11 +21,19 @@ export const useMatches = () => {
   return context
 }
 
+/**
+ * Провайдер контекста мэтчей
+ * Управляет списком взаимных лайков
+ */
 export const MatchProvider = ({ children }) => {
-  const [matches, setMatches] = useState([])
+  const [matches, setMatches] = useState([]) // Список мэтчей
 
+  /**
+   * Добавляет мэтч в список (если его ещё нет)
+   */
   const addMatch = (profile) => {
     setMatches(prev => {
+      // Проверяем, нет ли уже этого профиля в списке
       if (prev.some(m => m.id === profile.id)) {
         return prev
       }
@@ -22,6 +41,9 @@ export const MatchProvider = ({ children }) => {
     })
   }
 
+  /**
+   * Удаляет мэтч из списка по ID
+   */
   const removeMatch = (profileId) => {
     setMatches(prev => prev.filter(m => m.id !== profileId))
   }

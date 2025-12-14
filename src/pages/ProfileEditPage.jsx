@@ -6,13 +6,20 @@ import { russianCities, universities, interests, goals } from '../data/formData'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
 import { getAuthToken } from '../utils/api'
 
+/**
+ * ProfileEditPage - страница редактирования профиля
+ * 
+ * Отличается от ProfilePage тем, что:
+ * - Всегда показывает форму редактирования (не показывает только просмотр)
+ * - После сохранения перенаправляет на /profile
+ * - Имеет кнопку "Отмена" для возврата назад
+ */
 const ProfileEditPage = () => {
   const { user, jwt } = useWebApp()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [viewMode, setViewMode] = useState(true)
   const [profileData, setProfileData] = useState(null)
   const [isGenderDropdownOpen, setIsGenderDropdownOpen] = useState(false)
   const fileInputRef = useRef(null)
@@ -43,11 +50,10 @@ const ProfileEditPage = () => {
           const cachedData = JSON.parse(cached)
           if (cachedData.expires > Date.now()) {
             setIsEditing(true)
-            setViewMode(true)
             setProfileData(cachedData.data)
             setFormData({
               name: cachedData.data.name || '',
-              gender: cachedData.data.gender || '',
+              gender: cachedData.data.gender === 'Мужской' ? 'male' : cachedData.data.gender === 'Женский' ? 'female' : cachedData.data.gender || '',
               age: cachedData.data.age?.toString() || '',
               city: cachedData.data.city || '',
               university: cachedData.data.university || '',
@@ -94,7 +100,6 @@ const ProfileEditPage = () => {
             hasValidCache = true
             if (!profileData) {
               setIsEditing(true)
-              setViewMode(true)
               setProfileData(cachedData.data)
               setFormData({
                 name: cachedData.data.name || '',
@@ -168,7 +173,6 @@ const ProfileEditPage = () => {
         if (response.ok) {
           const data = await response.json()
           setIsEditing(true)
-          setViewMode(true)
           
           let parsedInterests = []
           let parsedGoals = []
@@ -228,13 +232,13 @@ const ProfileEditPage = () => {
           })
         } else if (response.status === 404) {
           if (!hasValidCache) {
-            setIsEditing(false)
+            navigate('/profile', { replace: true })
           }
         } else {
           if (!isMounted) return
           console.warn('Unexpected error loading profile:', response.status)
           if (!hasValidCache) {
-            setIsEditing(false)
+            navigate('/profile', { replace: true })
           }
         }
       } catch (error) {
@@ -244,19 +248,19 @@ const ProfileEditPage = () => {
         }
         if (error.message === 'NETWORK_ERROR' || 
             (error.name === 'TypeError' && error.message.includes('Failed to fetch'))) {
-          console.log('Бэкенд недоступен, показываем форму для создания профиля')
+          console.log('Бэкенд недоступен, редирект на создание профиля')
           if (!hasValidCache) {
-            setIsEditing(false)
+            navigate('/profile', { replace: true })
           }
         } else if (error.name === 'AbortError') {
           console.warn('Request timeout - бэкенд не отвечает')
           if (!hasValidCache) {
-            setIsEditing(false)
+            navigate('/profile', { replace: true })
           }
         } else {
           console.error('Error loading profile:', error)
           if (!hasValidCache) {
-            setIsEditing(false)
+            navigate('/profile', { replace: true })
           }
         }
       } finally {
@@ -485,12 +489,8 @@ const ProfileEditPage = () => {
         localStorage.setItem('last_user_id', user.id.toString())
         localStorage.removeItem(`profiles_${user.id}`)
         
-        if (!isEditing) {
-          navigate('/profiles', { replace: true })
-        } else {
-          setProfileData(updatedProfileData)
-          setViewMode(true)
-        }
+        setProfileData(updatedProfileData)
+        navigate('/profile', { replace: true })
         return
       } else {
         const errorText = await response.text()
@@ -542,9 +542,9 @@ const ProfileEditPage = () => {
           error.message.includes('NetworkError') ||
           error.message.includes('Network request failed')
         )) {
-          errorMessage = `Ошибка сети: Failed to Fetch\n\nВозможные причины:\n1. Бэкенд недоступен: ${API_ENDPOINTS.PROFILES}\n2. Проблема с CORS\n3. Неправильная настройка переменных окружения`
+          errorMessage = 'Не удалось подключиться к серверу. Проверьте подключение к интернету и попробуйте позже.'
         } else {
-          errorMessage = `Не удалось подключиться к серверу. Проверьте, что бэкенд запущен и доступен по адресу: ${API_ENDPOINTS.PROFILES}`
+          errorMessage = 'Не удалось подключиться к серверу. Проверьте подключение к интернету.'
         }
       } else if (error.message) {
         errorMessage = error.message
@@ -566,99 +566,12 @@ const ProfileEditPage = () => {
     )
   }
 
-  // Если профиль существует и мы в режиме просмотра, показываем карточку
-  if (viewMode && profileData && isEditing) {
+  if (!isEditing || !profileData) {
     return (
       <div className="min-w-[320px] min-h-[600px] max-w-2xl w-full mx-auto p-4 md:p-6 pb-20 md:pb-6 page-gradient" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom))' }}>
-        <div className="space-y-4 mt-4">
-          {profileData.photo_url ? (
-            <div className="w-full">
-              <img
-                src={getPhotoUrl(profileData.photo_url)}
-                alt={profileData.name}
-                className="w-full h-64 object-cover rounded-xl"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                }}
-              />
-            </div>
-          ) : (
-            <div className="w-full h-48 bg-white/15 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/40">
-              <span className="text-gray-400 text-lg">📷</span>
-            </div>
-          )}
-
-          <Card>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">{profileData.name}</h2>
-
-            <div className="space-y-3 text-sm">
-              <div>
-                <span className="font-semibold text-gray-800">Пол:</span>{' '}
-                <span className="text-gray-800 font-medium">{profileData.gender}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-800">Возраст:</span>{' '}
-                <span className="text-gray-600">{profileData.age} лет</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-800">Город:</span>{' '}
-                <span className="text-gray-600">{profileData.city}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-800">Вуз:</span>{' '}
-                <span className="text-gray-600">{profileData.university}</span>
-              </div>
-
-              <div>
-                <span className="font-semibold text-gray-800">Интересы:</span>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {profileData.interests.map((interest, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-white/20 backdrop-blur-md text-teal-700 rounded-lg text-xs border border-white/40"
-                    >
-                      {interest}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <span className="font-semibold text-gray-800">Цели:</span>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {profileData.goals.map((goal, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-white/40 backdrop-blur-sm text-emerald-700 rounded-lg text-xs border border-white/30"
-                    >
-                      {goal}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {profileData.bio && (
-                <div>
-                  <span className="font-semibold text-gray-800">О себе:</span>
-                  <p className="text-gray-800 mt-1 leading-relaxed">{profileData.bio}</p>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          <Button
-            variant="primary"
-            onClick={() => {
-              setViewMode(false)
-              requestAnimationFrame(() => {
-                window.scrollTo({ top: 0, behavior: 'instant' })
-              })
-            }}
-            fullWidth
-          >
-            Редактировать профиль
-          </Button>
-        </div>
+        <Card className="mt-4">
+          <p className="text-center text-gray-800 font-medium py-8">Загрузка профиля...</p>
+        </Card>
       </div>
     )
   }
@@ -896,14 +809,7 @@ const ProfileEditPage = () => {
               type="button"
               variant="ghost"
               onClick={() => {
-                requestAnimationFrame(() => {
-                  window.scrollTo({ top: 0, behavior: 'instant' })
-                })
-                if (isEditing) {
-                  setViewMode(true)
-                } else {
-                  navigate('/')
-                }
+                navigate('/profile')
               }}
               className="flex-1"
             >
