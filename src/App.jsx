@@ -1,10 +1,12 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { WebAppProvider, useWebApp } from './contexts/WebAppContext'
+import { MatchProvider } from './contexts/MatchContext'
 import { Header, Card, BottomNav, Loader } from './components'
 import ProfilePage from './pages/ProfilePage'
 import ProfilesPage from './pages/ProfilesPage'
 import NetListPage from './pages/NetListPage'
 import ProfileEditPage from './pages/ProfileEditPage'
+import UserCardPage from './pages/UserCardPage'
 
 const ErrorScreen = ({ error }) => (
   <div className="min-h-screen page-gradient flex items-center justify-center p-4">
@@ -25,12 +27,13 @@ const AppContent = () => {
     return <Loader />
   }
 
-  // Всегда показываем приложение, даже в режиме разработки
-  // ErrorScreen показываем только для критических ошибок авторизации в продакшене
-  const isDevMode = error && (error.includes('Режим разработки') || error.includes('Telegram Web App не обнаружен'))
-  const isCriticalError = error && !user && !isDevMode && window.Telegram?.WebApp
+  // Определяем режим разработки: если нет Telegram WebApp, то это точно режим разработки
+  const isDevMode = !window.Telegram?.WebApp
 
-  if (isCriticalError) {
+  // ErrorScreen показываем только в продакшене (когда есть Telegram WebApp) 
+  // и только если это реальная критическая ошибка авторизации
+  // В режиме разработки всегда показываем приложение
+  if (!isDevMode && error && !user && error.includes('Authentication failed')) {
     return <ErrorScreen error={error} />
   }
 
@@ -46,14 +49,15 @@ const AppContent = () => {
         )}
         <Header appName="StudNet" connectionsCount={0} statusText="Один в поле" />
         <Routes>
-          <Route path="/" element={<NetListPage />} />
+          <Route path="/" element={<ProfilePage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/edit" element={<ProfileEditPage />} />
           <Route path="/ankets" element={<ProfilesPage />} />
           <Route path="/profiles" element={<ProfilesPage />} />
+          <Route path="/user/:id" element={<UserCardPage />} />
           <Route path="/netlist" element={<NetListPage />} />
           <Route path="/network" element={<NetListPage />} />
-          <Route path="*" element={<NetListPage />} />
+          <Route path="*" element={<ProfilePage />} />
         </Routes>
         <BottomNav />
       </div>
@@ -64,7 +68,9 @@ const AppContent = () => {
 function App() {
   return (
     <WebAppProvider>
-      <AppContent />
+      <MatchProvider>
+        <AppContent />
+      </MatchProvider>
     </WebAppProvider>
   )
 }

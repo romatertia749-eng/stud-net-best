@@ -1,18 +1,17 @@
-import { Card, Button } from '../components'
+import { Card } from '../components'
 
 const NetListPage = () => {
   return (
     <div className="min-h-screen page-gradient pb-20 pt-4">
-      <div className="px-4">
-        <Card className="text-center py-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Net-Лист</h2>
-          <p className="text-gray-600 mb-6 text-base">
-            У вас пока нет контактов.<br />
-            Начните знакомиться!
+      <div className="px-4 pt-4">
+        <Card className="max-w-md mx-auto">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Ошибка авторизации</h2>
+          <p className="text-gray-600 mb-4">
+            Данные инициализации Telegram отсутствуют
           </p>
-          <Button variant="primary" size="lg" fullWidth>
-            Найти новых знакомых
-          </Button>
+          <p className="text-gray-500 text-sm">
+            Убедитесь, что приложение запущено внутри Telegram
+          </p>
         </Card>
       </div>
     </div>

@@ -23,14 +23,13 @@ export const WebAppProvider = ({ children }) => {
       setIsLoading(true)
       setError(null)
 
-      // Таймаут для безопасности - гарантируем, что загрузка завершится
       let isCompleted = false
       const timeoutId = setTimeout(() => {
         if (!isCompleted) {
           setIsLoading(false)
           setError('Режим разработки: Telegram Web App не обнаружен')
         }
-      }, 2000)
+      }, 500)
 
       try {
         const savedToken = getAuthToken()
@@ -55,44 +54,55 @@ export const WebAppProvider = ({ children }) => {
               language_code: initDataUnsafe.user.language_code || 'ru',
             }
             setUser(userData)
+            isCompleted = true
+            clearTimeout(timeoutId)
+            setIsLoading(false)
           }
 
           if (initData) {
-            try {
-              const response = await fetch(API_ENDPOINTS.AUTH, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `tma ${initData}`,
-                },
-              })
-
+            fetch(API_ENDPOINTS.AUTH, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `tma ${initData}`,
+              },
+            })
+            .then(async (response) => {
               if (!response.ok) {
                 const errorText = await response.text()
                 throw new Error(`Authentication failed: ${response.status} - ${errorText}`)
               }
-
-              const data = await response.json()
+              return response.json()
+            })
+            .then((data) => {
               const token = data.token || data.jwt
-              
               if (token) {
                 setAuthToken(token)
                 setJwt(token)
-              } else {
-                throw new Error('Token not received from server')
               }
-            } catch (authError) {
+            })
+            .catch((authError) => {
               console.error('Auth error:', authError)
               setError(authError.message || 'Ошибка авторизации')
-            }
+            })
           } else {
             console.warn('initData is missing')
+            if (!initDataUnsafe?.user) {
+              const mockUser = {
+                id: 123456789,
+                first_name: 'Тестовый',
+                last_name: 'Пользователь',
+                username: 'test_user',
+                language_code: 'ru',
+              }
+              setUser(mockUser)
+            }
             setError('Данные инициализации Telegram отсутствуют')
+            isCompleted = true
+            clearTimeout(timeoutId)
+            setIsLoading(false)
           }
-          isCompleted = true
-          clearTimeout(timeoutId)
         } else {
-          // Режим разработки - создаём мок-пользователя
           console.warn('Telegram Web App не обнаружен. Режим разработки.')
           const mockUser = {
             id: 123456789,
@@ -105,13 +115,11 @@ export const WebAppProvider = ({ children }) => {
           isCompleted = true
           clearTimeout(timeoutId)
           setError('Режим разработки: Telegram Web App не обнаружен')
+          setIsLoading(false)
         }
       } catch (err) {
         console.error('Initialization error:', err)
         setError(err.message || 'Ошибка инициализации')
-        isCompleted = true
-        clearTimeout(timeoutId)
-      } finally {
         isCompleted = true
         clearTimeout(timeoutId)
         setIsLoading(false)

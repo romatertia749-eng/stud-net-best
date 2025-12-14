@@ -2,24 +2,25 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import PropTypes from 'prop-types'
+import { icons } from '../assets/icons'
 
 const navItems = [
   {
     path: '/profile',
     label: 'Профиль',
-    iconPath: '/assets/stuff/icon_profile.png',
+    iconPath: icons.profile,
     iconName: 'profile'
   },
   {
     path: '/profiles',
     label: 'Анкеты',
-    iconPath: '/assets/stuff/icon_ankets.png',
+    iconPath: icons.ankets,
     iconName: 'ankets'
   },
   {
     path: '/network',
     label: 'Net-Лист',
-    iconPath: '/assets/stuff/icon_handshake.png',
+    iconPath: icons.handshake,
     iconName: 'handshake'
   }
 ]
@@ -57,7 +58,7 @@ const NavItem = ({ item, isActive }) => {
       {isActive && (
         <motion.div
           layoutId="activeTab"
-          className="absolute inset-0 bg-purple-100/50 rounded-xl"
+          className="absolute inset-0 bg-purple-100/50 rounded-xl border-2 border-cyan-400"
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         />
       )}
@@ -78,7 +79,7 @@ const NavItem = ({ item, isActive }) => {
           <IconFallback name={item.iconName} />
         )}
       </motion.div>
-      <span className={`text-xs font-medium relative z-10 ${isActive ? 'text-purple-600' : 'text-gray-600'}`}>
+      <span className={`text-xs font-bold relative z-10 ${isActive ? 'text-cyan-600' : 'text-gray-600'}`}>
         {item.label}
       </span>
     </>
@@ -93,15 +94,15 @@ NavItem.propTypes = {
 const BottomNav = ({ className = '' }) => {
   return (
     <nav className={`fixed bottom-0 left-0 right-0 z-50 bg-white/20 backdrop-blur-md border-t border-white/20 shadow-lg safe-area-inset-bottom ${className}`}>
-      <div className="flex items-center justify-around px-2 py-2">
+      <div className="flex items-center px-2 py-2">
         {navItems.map((item, index) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 relative ${
+              `flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-200 relative flex-1 ${
                 isActive
-                  ? 'text-purple-600'
+                  ? 'text-cyan-600'
                   : 'text-gray-600'
               }`
             }

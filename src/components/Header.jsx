@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion'
 import PropTypes from 'prop-types'
+import { icons } from '../assets/icons'
 
 const Header = ({
   appName = 'StudNet',
   connectionsCount = 0,
   statusText = 'Один в поле',
-  logoPath = '/assets/stuff/logo.png',
+  logoPath = icons.logo,
   className = ''
 }) => {
   return (

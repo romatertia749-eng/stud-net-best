@@ -75,5 +75,27 @@ export const api = {
   delete: (endpoint, options = {}) => apiRequest(endpoint, { ...options, method: 'DELETE' }),
 }
 
+export const fetchWithAuth = async (url, options = {}) => {
+  const token = getAuthToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+  
+  return fetch(fullUrl, {
+    ...options,
+    headers,
+    mode: options.mode || 'cors',
+    credentials: 'include',
+  })
+}
+
 export default api
+
 
