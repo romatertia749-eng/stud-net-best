@@ -1,7 +1,7 @@
 """
 Сервис для работы с профилями
 """
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import and_, or_, not_
 from typing import List, Optional
 from datetime import datetime
@@ -160,43 +160,89 @@ def create_or_update_profile(
 
 def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
     """Получение списка пользователей, которые лайкнули текущего пользователя"""
+    # #region agent log
+    import json
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:162","message":"Function entry","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
+    
     current_user_profile = get_profile_by_user_id(db, user_id)
+    
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:166","message":"After get_profile_by_user_id","data":{"has_profile":current_user_profile is not None,"profile_id":current_user_profile.id if current_user_profile else None},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
     
     if not current_user_profile:
         return []
     
     # Получаем ID профилей, на которые текущий пользователь уже ответил
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"profile_service.py:172","message":"Before responded query","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
+    
     responded_profile_ids_list = [row[0] for row in db.query(Swipe.target_profile_id).filter(
         Swipe.user_id == user_id
     ).all()]
     
-    # Получаем user_id тех, кто лайкнул текущего пользователя
-    # (свайпы где target_profile_id = текущий профиль, action = 'like')
-    liker_swipes = db.query(Swipe).filter(
-        Swipe.target_profile_id == current_user_profile.id,
-        Swipe.action == 'like'
-    ).order_by(Swipe.created_at.desc()).all()
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"profile_service.py:177","message":"After responded query","data":{"responded_count":len(responded_profile_ids_list)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
     
-    # Получаем user_id лайкнувших пользователей
-    liker_user_ids = [swipe.user_id for swipe in liker_swipes]
+    # Используем JOIN для получения профилей тех, кто лайкнул текущего пользователя
+    # Это избегает проблем с корреляцией подзапросов
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:181","message":"Before main query construction","data":{"current_profile_id":current_user_profile.id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
     
-    if not liker_user_ids:
-        return []
-    
-    # Получаем профили этих пользователей
-    liker_profiles = db.query(Profile).filter(
-        Profile.user_id.in_(liker_user_ids),
+    # Основной запрос с JOIN - избегаем подзапросов, которые могут вызвать проблемы с корреляцией
+    # Создаём алиас для Swipe, чтобы избежать конфликтов при множественных JOIN
+    like_swipe = aliased(Swipe)
+    query = db.query(Profile).join(
+        like_swipe, 
+        and_(
+            like_swipe.target_profile_id == current_user_profile.id,
+            like_swipe.action == 'like',
+            Profile.user_id == like_swipe.user_id
+        )
+    ).filter(
         Profile.is_active == True,
         Profile.deleted_at == None
-    ).all()
+    )
     
-    # Исключаем профили, на которые уже ответили
+    # Исключаем профили, на которые уже ответили, используя LEFT JOIN с проверкой на NULL
     if responded_profile_ids_list:
-        liker_profiles = [p for p in liker_profiles if p.id not in responded_profile_ids_list]
+        responded_swipe = aliased(Swipe)
+        query = query.outerjoin(
+            responded_swipe,
+            and_(
+                responded_swipe.user_id == user_id,
+                responded_swipe.target_profile_id == Profile.id
+            )
+        ).filter(responded_swipe.id == None)
     
-    # Сортируем по дате свайпа (сохраняем порядок из liker_swipes)
-    swipe_by_user_id = {swipe.user_id: swipe.created_at for swipe in liker_swipes}
-    from datetime import datetime as dt
-    liker_profiles.sort(key=lambda p: swipe_by_user_id.get(p.user_id, dt.min), reverse=True)
+    query = query.order_by(like_swipe.created_at.desc())
+    
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:201","message":"Before query execution","data":{"has_responded_filter":bool(responded_profile_ids_list)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
+    
+    try:
+        liker_profiles = query.all()
+    except Exception as e:
+        # #region agent log
+        with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"profile_service.py:206","message":"Query execution error","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        # #endregion
+        raise
+    
+    # #region agent log
+    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:213","message":"After query execution","data":{"profiles_count":len(liker_profiles)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    # #endregion
     
     return liker_profiles
