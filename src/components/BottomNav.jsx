@@ -121,6 +121,20 @@ const BottomNav = ({ className = '' }) => {
           <NavLink
             key={item.path}
             to={item.path}
+            onMouseEnter={() => {
+              // Предзагружаем данные при наведении
+              if (item.path === '/profiles' || item.path === '/network') {
+                const userId = localStorage.getItem('last_user_id')
+                if (userId) {
+                  const cacheKey = item.path === '/profiles' ? `profiles_${userId}` : `matches_${userId}`
+                  const cached = localStorage.getItem(cacheKey)
+                  if (!cached) {
+                    // Можно предзагрузить данные в фоне
+                    // Пока просто проверяем кэш
+                  }
+                }
+              }
+            }}
             className={({ isActive }) =>
               `flex flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-200 relative flex-1 ${
                 isActive

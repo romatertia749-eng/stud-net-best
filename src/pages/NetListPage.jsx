@@ -89,6 +89,46 @@ const NetListPage = () => {
   const hasLoadedRef = useRef(false)
   const lastUserIdRef = useRef(null)
   const activeRequestsRef = useRef(0)
+  
+  // Загружаем кэш при первой загрузке
+  useEffect(() => {
+    if (!user?.id) return
+    
+    const cacheKey = `matches_${user.id}`
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached)
+        if (cachedData.expires > Date.now() && Array.isArray(cachedData.matches)) {
+          // #region agent log
+          const perfStart = performance.now()
+          // #endregion
+          const processedMatches = processProfiles(cachedData.matches)
+          const formattedMatches = processedMatches.map((profile) => ({
+            id: profile?.id,
+            userId: profile?.user_id || profile?.id,
+            name: profile?.name || '',
+            age: profile?.age || 0,
+            city: profile?.city || '',
+            university: profile?.university || '',
+            bio: profile?.bio || '',
+            interests: profile.interests || [],
+            goals: profile.goals || [],
+            photos: profile.photos || [],
+            username: profile?.username || null,
+          })).filter(match => match !== null)
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:92',message:'Cache loaded for matches',data:{time:performance.now()-perfStart,count:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          setMatchedProfiles(formattedMatches)
+          hasLoadedRef.current = true
+          lastUserIdRef.current = user.id
+        }
+      } catch (e) {
+        localStorage.removeItem(cacheKey)
+      }
+    }
+  }, [user?.id])
 
   useEffect(() => {
     // Загружаем мэтчи сразу, не ждем проверку профиля
@@ -112,10 +152,34 @@ const NetListPage = () => {
       activeRequestsRef.current += 1
       const requestId = activeRequestsRef.current
       
+      // Проверяем кэш перед запросом (внутри функции для доступа к userId)
+      const cacheKey = `matches_${userId}`
+      const cached = localStorage.getItem(cacheKey)
+      let hasValidCache = false
+      
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached)
+          if (cachedData.expires > Date.now() && Array.isArray(cachedData.matches)) {
+            hasValidCache = true
+            // Если данные уже в состоянии, не делаем запрос
+            if (matchedProfiles.length > 0) {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:133',message:'Skipping fetch - matches already loaded',data:{userId,matchesCount:matchedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
+              return
+            }
+          }
+        } catch (e) {
+          localStorage.removeItem(cacheKey)
+        }
+      }
+      
       // #region agent log
       const fetchStart = performance.now()
       const fetchId = Math.random().toString(36).substr(2, 9)
-      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:109',message:'fetchMatches started',data:{fetchId,requestId,activeRequests:activeRequestsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:150',message:'fetchMatches started',data:{fetchId,requestId,activeRequests:activeRequestsRef.current,hasCache:hasValidCache},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       if (!isMounted) {
@@ -123,16 +187,20 @@ const NetListPage = () => {
         return
       }
       
-      setLoading(true)
+      // Показываем loading только если нет валидного кэша
+      if (!hasValidCache) {
+        setLoading(true)
+      }
       
       try {
         controller = new AbortController()
+        // Ограничиваем таймаут до 5 секунд
         timeoutId = setTimeout(() => {
           // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:128',message:'Request timeout',data:{fetchId,requestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:135',message:'Request timeout (5s)',data:{fetchId,requestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           controller.abort()
-        }, 8000)
+        }, 5000)
         
         // Используем endpoint для получения мэтчей (взаимных лайков)
         const url = `${API_ENDPOINTS.MATCHES}?user_id=${userId}`
@@ -207,12 +275,56 @@ const NetListPage = () => {
             if (formattedMatches.length > 0 && setContextMatchedProfiles) {
               setContextMatchedProfiles(formattedMatches)
             }
+            // Сохраняем в кэш (сохраняем сырые данные для быстрой загрузки)
+            if (formattedMatches.length > 0) {
+              localStorage.setItem(cacheKey, JSON.stringify({
+                matches: data, // Сохраняем сырые данные от сервера
+                expires: Date.now() + 10 * 60 * 1000 // 10 минут
+              }))
+              localStorage.setItem('last_user_id', userId.toString())
+            }
             hasLoadedRef.current = true
             lastUserIdRef.current = userId
           }
         } else {
           if (isMounted) {
-            setMatchedProfiles([])
+            // При ошибке используем кэш, если он есть (даже если истёк)
+            const cacheKey = `matches_${userId}`
+            const cached = localStorage.getItem(cacheKey)
+            if (cached) {
+              try {
+                const cachedData = JSON.parse(cached)
+                if (Array.isArray(cachedData.matches)) {
+                  const processedMatches = processProfiles(cachedData.matches)
+                  const formattedMatches = processedMatches.map((profile) => ({
+                    id: profile?.id,
+                    userId: profile?.user_id || profile?.id,
+                    name: profile?.name || '',
+                    age: profile?.age || 0,
+                    city: profile?.city || '',
+                    university: profile?.university || '',
+                    bio: profile?.bio || '',
+                    interests: profile.interests || [],
+                    goals: profile.goals || [],
+                    photos: profile.photos || [],
+                    username: profile?.username || null,
+                  })).filter(match => match !== null)
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:290',message:'Using cache after error',data:{fetchId,matchesCount:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                  setMatchedProfiles(formattedMatches)
+                  hasLoadedRef.current = true
+                  lastUserIdRef.current = userId
+                  return
+                }
+              } catch (e) {
+                localStorage.removeItem(cacheKey)
+              }
+            }
+            // Только если нет кэша, очищаем данные
+            if (!cached) {
+              setMatchedProfiles([])
+            }
             hasLoadedRef.current = true
             lastUserIdRef.current = userId
           }
@@ -229,13 +341,49 @@ const NetListPage = () => {
         }
         
         if (error.name === 'AbortError') {
-          console.warn('[NetListPage] Request timeout')
+          console.warn('[NetListPage] Request timeout (5s)')
+          // При таймауте используем кэш, если он есть (даже если истёк)
+          const cacheKey = `matches_${userId}`
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            try {
+              const cachedData = JSON.parse(cached)
+              if (Array.isArray(cachedData.matches)) {
+                const processedMatches = processProfiles(cachedData.matches)
+                const formattedMatches = processedMatches.map((profile) => ({
+                  id: profile?.id,
+                  userId: profile?.user_id || profile?.id,
+                  name: profile?.name || '',
+                  age: profile?.age || 0,
+                  city: profile?.city || '',
+                  university: profile?.university || '',
+                  bio: profile?.bio || '',
+                  interests: profile.interests || [],
+                  goals: profile.goals || [],
+                  photos: profile.photos || [],
+                  username: profile?.username || null,
+                })).filter(match => match !== null)
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:330',message:'Using cache after timeout',data:{fetchId,matchesCount:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                setMatchedProfiles(formattedMatches)
+                hasLoadedRef.current = true
+                lastUserIdRef.current = userId
+                return
+              }
+            } catch (e) {
+              localStorage.removeItem(cacheKey)
+            }
+          }
         } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
           console.error('[NetListPage] Network error - backend not reachable:', error)
         } else {
           console.error('[NetListPage] Error fetching matches:', error)
         }
-        setMatchedProfiles([])
+        // Только если нет кэша, очищаем данные
+        if (!hasValidCache) {
+          setMatchedProfiles([])
+        }
         hasLoadedRef.current = true
         lastUserIdRef.current = userId
       } finally {
@@ -246,7 +394,8 @@ const NetListPage = () => {
         }
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:235',message:'fetchMatches completed',data:{fetchId,requestId,time:performance.now()-fetchStart,activeRequests:activeRequestsRef.current,matchesCount:matchedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        const totalTime = performance.now() - fetchStart
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:250',message:'fetchMatches completed',data:{fetchId,requestId,time:totalTime,activeRequests:activeRequestsRef.current,matchesCount:matchedProfiles.length,exceeded5s:totalTime>5000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         if (isMounted) {
           setLoading(false)
@@ -275,6 +424,9 @@ const NetListPage = () => {
   // Используем данные из контекста, если они есть и локальные данные пусты
   useEffect(() => {
     if (contextMatches && contextMatches.length > 0 && matchedProfiles.length === 0 && !loading) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:276',message:'Using context matches',data:{matchesCount:contextMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
       setMatchedProfiles(contextMatches)
     }
   }, [contextMatches, matchedProfiles.length, loading])

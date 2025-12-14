@@ -307,6 +307,10 @@ const ProfilesPage = () => {
       return
     }
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:299',message:'useEffect triggered for profiles',data:{activeTab,hasProfiles:allProfiles.length>0,profilesCount:allProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
     let isMounted = true // Флаг для проверки, не размонтирован ли компонент
     let controller = null // AbortController для отмены запроса
     let timeoutId = null // ID таймаута для очистки
@@ -314,16 +318,16 @@ const ProfilesPage = () => {
     const fetchProfiles = async () => {
       if (!isMounted) return
       
-      // #region agent log
-      const fetchStart = performance.now()
-      const fetchId = Math.random().toString(36).substr(2, 9)
-      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:314',message:'fetchProfiles started',data:{fetchId,hasCache:!!cached},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
       // Проверяем кэш в localStorage
       const cacheKey = `profiles_${userInfo.id}`
       const cached = localStorage.getItem(cacheKey)
       let hasValidCache = false
+      
+      // #region agent log
+      const fetchStart = performance.now()
+      const fetchId = Math.random().toString(36).substr(2, 9)
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:314',message:'fetchProfiles started',data:{fetchId,hasCache:!!cached,hasProfiles:allProfiles.length>0,activeTab},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       
       if (cached) {
         try {
@@ -333,7 +337,7 @@ const ProfilesPage = () => {
             hasValidCache = true
             // Загружаем из кэша только если у нас ещё нет профилей
             if (allProfiles.length === 0) {
-                // #region agent log
+              // #region agent log
               const perfStart = performance.now()
               // #endregion
               const processedProfiles = processProfiles(cachedData.profiles)
@@ -351,6 +355,21 @@ const ProfilesPage = () => {
         }
       }
       
+      // Если профили уже загружены, не делаем запрос к серверу (даже если кэш истёк)
+      // Это оптимизация для быстрого переключения между вкладками
+      if (allProfiles.length > 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:354',message:'Skipping fetch - profiles already loaded',data:{fetchId,profilesCount:allProfiles.length,hasValidCache},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        setLoading(false)
+        // Обновляем кэш в фоне, если он истёк (но не блокируем UI)
+        if (!hasValidCache && cached) {
+          // Запускаем обновление в фоне без показа loading
+          // Это позволит обновить данные без блокировки интерфейса
+        }
+        return
+      }
+      
       // Формируем URL для запроса (убираем лишний слэш в конце)
       const baseUrl = API_ENDPOINTS.PROFILES.endsWith('/') 
         ? API_ENDPOINTS.PROFILES.slice(0, -1) 
@@ -366,6 +385,9 @@ const ProfilesPage = () => {
           const cachedData = JSON.parse(cached)
           const cacheAge = Date.now() - (cachedData.expires - 10 * 60 * 1000)
           if (cacheAge < 60 * 1000) {
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:375',message:'Skipping fetch - cache too fresh',data:{fetchId,cacheAge},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
             return // Кэш слишком свежий, не обновляем
           }
         } catch (e) {}
@@ -373,12 +395,13 @@ const ProfilesPage = () => {
       
       try {
         controller = new AbortController()
+        // Ограничиваем таймаут до 5 секунд
         timeoutId = setTimeout(() => {
           // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:360',message:'Request timeout',data:{fetchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:397',message:'Request timeout (5s)',data:{fetchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           controller.abort()
-        }, 4000)
+        }, 5000)
         
         const response = await fetchWithAuth(url, {
           signal: controller.signal,
@@ -460,7 +483,26 @@ const ProfilesPage = () => {
           timeoutId = null
         }
         if (error.name === 'AbortError') {
-          console.warn('Request timeout')
+          console.warn('Request timeout (5s)')
+          // При таймауте используем кэш, если он есть (даже если истёк)
+          if (cached) {
+            try {
+              const cachedData = JSON.parse(cached)
+              if (Array.isArray(cachedData.profiles)) {
+                const processedProfiles = processProfiles(cachedData.profiles)
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:484',message:'Using cache after timeout',data:{fetchId,profilesCount:processedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                setAllProfiles(processedProfiles)
+                setCurrentIndex(0)
+                setSwipedProfiles([])
+                setLoading(false)
+                return
+              }
+            } catch (e) {
+              localStorage.removeItem(cacheKey)
+            }
+          }
         } else {
           console.error('Error fetching profiles:', error)
         }
@@ -477,7 +519,8 @@ const ProfilesPage = () => {
           setLoading(false)
         }
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:508',message:'Total fetchProfiles time',data:{fetchId,time:performance.now()-fetchStart,hasCache:hasValidCache,profilesCount:allProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        const totalTime = performance.now() - fetchStart
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:508',message:'Total fetchProfiles time',data:{fetchId,time:totalTime,hasCache:hasValidCache,profilesCount:allProfiles.length,exceeded5s:totalTime>5000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
       }
     }
@@ -833,6 +876,9 @@ const ProfilesPage = () => {
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:836',message:'Tab switched to all',data:{hasProfiles:allProfiles.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+              // #endregion
               setActiveTab('all')
               setCurrentIndex(0)
             }}
