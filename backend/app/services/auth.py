@@ -71,7 +71,7 @@ def create_jwt_token(user_id: int) -> str:
     
     expire = datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),  # JWT требует, чтобы sub был строкой
         "exp": expire
     }
     
@@ -95,9 +95,19 @@ def decode_jwt_token(token: str) -> Optional[int]:
         logger.info(f"🔐 Декодирование токена (длина токена: {len(token)}, используемый ключ: {secret_preview}, длина ключа: {len(secret_key)})")
         
         payload = jwt.decode(token, secret_key, algorithms=[settings.JWT_ALGORITHM])
-        user_id: int = payload.get("sub")
-        logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
-        return user_id
+        # sub теперь строка, нужно преобразовать в int
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            logger.warning("❌ Токен не содержит 'sub'")
+            return None
+        
+        try:
+            user_id: int = int(user_id_str)
+            logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
+            return user_id
+        except (ValueError, TypeError):
+            logger.warning(f"❌ Не удалось преобразовать 'sub' в int: {user_id_str}")
+            return None
     except JWTError as e:
         logger.warning(f"❌ Ошибка декодирования токена: {type(e).__name__}: {str(e)}")
         # Дополнительная информация для отладки
