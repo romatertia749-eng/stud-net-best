@@ -162,15 +162,21 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
     """Получение списка пользователей, которые лайкнули текущего пользователя"""
     # #region agent log
     import json
-    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:162","message":"Function entry","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    import os
+    log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.cursor', 'debug.log')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:162","message":"Function entry","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    except: pass
     # #endregion
     
     current_user_profile = get_profile_by_user_id(db, user_id)
     
     # #region agent log
-    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:166","message":"After get_profile_by_user_id","data":{"has_profile":current_user_profile is not None,"profile_id":current_user_profile.id if current_user_profile else None},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"profile_service.py:166","message":"After get_profile_by_user_id","data":{"has_profile":current_user_profile is not None,"profile_id":current_user_profile.id if current_user_profile else None},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    except: pass
     # #endregion
     
     if not current_user_profile:
@@ -187,15 +193,19 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
     ).all()]
     
     # #region agent log
-    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"profile_service.py:177","message":"After responded query","data":{"responded_count":len(responded_profile_ids_list)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"profile_service.py:177","message":"After responded query","data":{"responded_count":len(responded_profile_ids_list)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    except: pass
     # #endregion
     
     # Используем JOIN для получения профилей тех, кто лайкнул текущего пользователя
     # Это избегает проблем с корреляцией подзапросов
     # #region agent log
-    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:181","message":"Before main query construction","data":{"current_profile_id":current_user_profile.id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:181","message":"Before main query construction","data":{"current_profile_id":current_user_profile.id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    except: pass
     # #endregion
     
     # Основной запрос с JOIN - избегаем подзапросов, которые могут вызвать проблемы с корреляцией
@@ -213,16 +223,9 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
         Profile.deleted_at == None
     )
     
-    # Исключаем профили, на которые уже ответили, используя LEFT JOIN с проверкой на NULL
+    # Исключаем профили, на которые уже ответили, используя простой фильтр с in_
     if responded_profile_ids_list:
-        responded_swipe = aliased(Swipe)
-        query = query.outerjoin(
-            responded_swipe,
-            and_(
-                responded_swipe.user_id == user_id,
-                responded_swipe.target_profile_id == Profile.id
-            )
-        ).filter(responded_swipe.id == None)
+        query = query.filter(~Profile.id.in_(responded_profile_ids_list))
     
     query = query.order_by(like_swipe.created_at.desc())
     
@@ -235,14 +238,18 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
         liker_profiles = query.all()
     except Exception as e:
         # #region agent log
-        with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"profile_service.py:206","message":"Query execution error","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"profile_service.py:206","message":"Query execution error","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        except: pass
         # #endregion
         raise
     
     # #region agent log
-    with open('c:\\Users\\Lenovo\\stud-net\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:213","message":"After query execution","data":{"profiles_count":len(liker_profiles)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"profile_service.py:213","message":"After query execution","data":{"profiles_count":len(liker_profiles)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+    except: pass
     # #endregion
     
     return liker_profiles
