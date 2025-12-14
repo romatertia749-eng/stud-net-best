@@ -14,7 +14,8 @@
 
 from pydantic_settings import BaseSettings
 from typing import List
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
+import os
 
 class Settings(BaseSettings):
     """
@@ -34,10 +35,23 @@ class Settings(BaseSettings):
     
     # JWT
     # ⚠️ НЕ пиши реальный секретный ключ здесь!
-    # Установи JWT_SECRET_KEY в переменных окружения Koyeb
+    # Установи JWT_SECRET_KEY или JWT_SECRET в переменных окружения Koyeb
     JWT_SECRET_KEY: str = "your-secret-key-here-change-in-production"
+    JWT_SECRET: str = ""  # Альтернативное имя для совместимости
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
+    
+    @model_validator(mode='after')
+    def validate_jwt_secret(self):
+        """Если JWT_SECRET_KEY не установлен, используем JWT_SECRET из переменных окружения"""
+        if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "your-secret-key-here-change-in-production":
+            # Проверяем переменную окружения напрямую
+            jwt_secret = os.getenv('JWT_SECRET', '')
+            if jwt_secret:
+                self.JWT_SECRET_KEY = jwt_secret
+            elif self.JWT_SECRET:
+                self.JWT_SECRET_KEY = self.JWT_SECRET
+        return self
     
     # Telegram
     # Опционально: установи TELEGRAM_BOT_TOKEN в переменных окружения Koyeb
@@ -68,6 +82,12 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+
+# Дополнительная проверка JWT_SECRET после создания объекта
+if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "your-secret-key-here-change-in-production":
+    jwt_secret_env = os.getenv('JWT_SECRET', '')
+    if jwt_secret_env:
+        settings.JWT_SECRET_KEY = jwt_secret_env
 
 # Простая проверка при загрузке модуля
 def _check_config():

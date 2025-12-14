@@ -25,6 +25,7 @@ app = FastAPI(
 )
 
 # Настройка CORS
+print(f"🔧 CORS настроен для origins: {settings.CORS_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -46,6 +47,37 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 async def root():
     """Корневой endpoint"""
     return {"message": "StudNet API", "version": "1.0.0"}
+
+@app.get("/api")
+async def api_root():
+    """API корневой endpoint"""
+    return {
+        "message": "StudNet API",
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "/api/auth",
+            "profiles": "/api/profiles",
+            "matches": "/api/matches",
+            "debug": "/api/debug"
+        }
+    }
+
+@app.get("/health")
+async def health():
+    """Простая проверка здоровья без префикса"""
+    return {"status": "ok", "service": "StudNet API"}
+
+@app.get("/routes")
+async def list_routes():
+    """Список всех зарегистрированных роутов"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else []
+            })
+    return {"routes": routes}
 
 if __name__ == "__main__":
     import uvicorn
