@@ -13,7 +13,7 @@
 """
 
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Union
 from pydantic import field_validator, model_validator
 import os
 
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     
     # CORS - может быть строкой (через запятую) или списком
     # ⚠️ Установи CORS_ORIGINS в переменных окружения Koyeb с URL вашего Netlify сайта
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: Union[str, List[str]] = "http://localhost:5173,http://localhost:3000"
     
     # File Upload
     UPLOAD_DIR: str = "uploads"
@@ -75,6 +75,8 @@ class Settings(BaseSettings):
         """Парсит CORS_ORIGINS из строки в список"""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, list):
+            return [str(origin).strip() for origin in v if origin]
         return v
     
     class Config:
@@ -82,6 +84,13 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+
+# Убеждаемся, что CORS_ORIGINS всегда список
+if not isinstance(settings.CORS_ORIGINS, list):
+    if isinstance(settings.CORS_ORIGINS, str):
+        settings.CORS_ORIGINS = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+    else:
+        settings.CORS_ORIGINS = []
 
 # Дополнительная проверка JWT_SECRET после создания объекта
 if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "your-secret-key-here-change-in-production":
@@ -109,8 +118,9 @@ def _check_config():
         print("✅ JWT_SECRET_KEY загружен из переменных окружения")
     
     # Проверяем CORS_ORIGINS
-    cors_str = ", ".join(settings.CORS_ORIGINS) if isinstance(settings.CORS_ORIGINS, list) else str(settings.CORS_ORIGINS)
-    if "localhost" in cors_str and len(settings.CORS_ORIGINS) <= 2:
+    cors_origins_list = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+    cors_str = ", ".join(cors_origins_list) if isinstance(cors_origins_list, list) else str(cors_origins_list)
+    if "localhost" in cors_str and len(cors_origins_list) <= 2:
         warnings.append("⚠️  CORS_ORIGINS использует значение по умолчанию - установите URL вашего Netlify сайта в Koyeb")
     else:
         print(f"✅ CORS_ORIGINS загружен: {cors_str}")
