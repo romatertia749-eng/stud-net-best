@@ -16,7 +16,7 @@ export const debounce = (func, wait) => {
   }
 }
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 
 /**
  * Хук для использования debounce в React компонентах
@@ -26,6 +26,15 @@ import { useRef, useCallback } from 'react'
  */
 export const useDebounce = (callback, delay) => {
   const timeoutRef = useRef(null)
+  
+  // Очищаем таймаут при размонтировании
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
   
   return useCallback((...args) => {
     if (timeoutRef.current) {

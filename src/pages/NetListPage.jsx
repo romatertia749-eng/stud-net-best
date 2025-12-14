@@ -106,6 +106,7 @@ const NetListPage = () => {
 
     let isMounted = true
     let controller = null
+    let timeoutId = null
 
     const fetchMatches = async () => {
       activeRequestsRef.current += 1
@@ -154,10 +155,13 @@ const NetListPage = () => {
           headers,
         })
         
-        clearTimeout(timeoutId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:136',message:'Network request time',data:{fetchId,requestId,time:performance.now()-requestStart,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:157',message:'Network request time',data:{fetchId,requestId,time:performance.now()-requestStart,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
         
         if (!isMounted) return
@@ -214,6 +218,11 @@ const NetListPage = () => {
           }
         }
       } catch (error) {
+        // Очищаем таймаут при ошибке
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         if (!isMounted) {
           activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
           return
@@ -230,6 +239,11 @@ const NetListPage = () => {
         hasLoadedRef.current = true
         lastUserIdRef.current = userId
       } finally {
+        // Очищаем таймаут в любом случае
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:235',message:'fetchMatches completed',data:{fetchId,requestId,time:performance.now()-fetchStart,activeRequests:activeRequestsRef.current,matchesCount:matchedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -247,12 +261,13 @@ const NetListPage = () => {
       fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:245',message:'useEffect cleanup',data:{activeRequests:activeRequestsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       isMounted = false
-      if (controller) {
-        controller.abort()
-      }
-      // Очищаем таймаут если он еще не выполнился
       if (timeoutId) {
         clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      if (controller) {
+        controller.abort()
+        controller = null
       }
     }
   }, [user?.id, setContextMatchedProfiles])

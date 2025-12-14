@@ -178,10 +178,21 @@ const ProfilesPage = () => {
     setIncomingError(null)
     setIncomingLikes([])
     
+    // #region agent log
+    const fetchStart = performance.now()
+    // #endregion
+    
+    let controller = null
+    let timeoutId = null
+    
     try {
       // Устанавливаем таймаут 4 секунды для запроса
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 4000)
+      controller = new AbortController()
+      timeoutId = setTimeout(() => {
+        if (controller) {
+          controller.abort()
+        }
+      }, 4000)
       
       const url = API_ENDPOINTS.INCOMING_LIKES
       console.log('📤 Запрос входящих лайков:', url)
@@ -193,7 +204,10 @@ const ProfilesPage = () => {
         signal: controller.signal
       })
       
-      clearTimeout(timeoutId)
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
       
       console.log('📥 Ответ от сервера:', {
         status: response.status,
@@ -295,6 +309,7 @@ const ProfilesPage = () => {
     
     let isMounted = true // Флаг для проверки, не размонтирован ли компонент
     let controller = null // AbortController для отмены запроса
+    let timeoutId = null // ID таймаута для очистки
     
     const fetchProfiles = async () => {
       if (!isMounted) return
@@ -370,7 +385,10 @@ const ProfilesPage = () => {
           mode: 'cors'
         })
         
-        clearTimeout(timeoutId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         
         if (!isMounted) {
           if (!hasValidCache) setLoading(false)
@@ -436,6 +454,11 @@ const ProfilesPage = () => {
         }
       } catch (error) {
         if (!isMounted) return
+        // Очищаем таймаут при ошибке
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         if (error.name === 'AbortError') {
           console.warn('Request timeout')
         } else {
@@ -445,6 +468,11 @@ const ProfilesPage = () => {
           setAllProfiles([])
         }
       } finally {
+        // Очищаем таймаут в любом случае
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         if (isMounted && !hasValidCache) {
           setLoading(false)
         }
@@ -460,9 +488,11 @@ const ProfilesPage = () => {
       isMounted = false
       if (timeoutId) {
         clearTimeout(timeoutId)
+        timeoutId = null
       }
       if (controller) {
         controller.abort()
+        controller = null
       }
     }
   }, [isReady, userInfo?.id, activeTab, debouncedCity, debouncedUniversity, debouncedInterests])
