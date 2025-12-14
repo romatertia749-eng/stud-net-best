@@ -67,6 +67,13 @@ export const WebAppProvider = ({ children }) => {
 
           const initData = tg.initData
           const initDataUnsafe = tg.initDataUnsafe
+          
+          console.log('📱 Telegram Web App обнаружен:', {
+            hasInitData: !!initData,
+            hasInitDataUnsafe: !!initDataUnsafe,
+            hasUser: !!initDataUnsafe?.user,
+            userId: initDataUnsafe?.user?.id
+          })
 
           if (initDataUnsafe?.user) {
             const userData = {
@@ -76,6 +83,7 @@ export const WebAppProvider = ({ children }) => {
               username: initDataUnsafe.user.username || '',
               language_code: initDataUnsafe.user.language_code || 'ru',
             }
+            console.log('👤 Данные пользователя установлены:', userData)
             setUser(userData)
             userWasSet = true
             isCompleted = true
@@ -84,6 +92,7 @@ export const WebAppProvider = ({ children }) => {
           }
 
           if (initData) {
+            console.log('🔐 Найдены initData, отправка запроса на авторизацию...')
             // Сохраняем информацию о пользователе для проверки в catch
             const hasUser = !!initDataUnsafe?.user
             
@@ -110,10 +119,66 @@ export const WebAppProvider = ({ children }) => {
                 console.log('✅ Токен сохранён в localStorage')
               } else {
                 console.error('❌ Токен не получен от сервера')
+                // Если есть пользователь, но токен не получен, пытаемся получить токен для режима разработки
+                if (hasUser && initDataUnsafe?.user?.id) {
+                  console.log('🔄 Повторная попытка получить токен для user_id:', initDataUnsafe.user.id)
+                  fetch(API_ENDPOINTS.AUTH, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      user_id: initDataUnsafe.user.id,
+                      dev_mode: true
+                    })
+                  })
+                  .then(async (response) => {
+                    if (response.ok) {
+                      const data = await response.json()
+                      const token = data.token || data.jwt
+                      if (token) {
+                        setAuthToken(token)
+                        setJwt(token)
+                        console.log('✅ Токен получен через fallback метод')
+                      }
+                    }
+                  })
+                  .catch((err) => {
+                    console.warn('⚠️ Fallback получение токена не удалось:', err.message)
+                  })
+                }
               }
             })
             .catch((authError) => {
               console.error('Auth error:', authError)
+              // Если есть пользователь, но авторизация не прошла, пытаемся получить токен для режима разработки
+              if (hasUser && initDataUnsafe?.user?.id) {
+                console.log('🔄 Попытка получить токен через fallback для user_id:', initDataUnsafe.user.id)
+                fetch(API_ENDPOINTS.AUTH, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    user_id: initDataUnsafe.user.id,
+                    dev_mode: true
+                  })
+                })
+                .then(async (response) => {
+                  if (response.ok) {
+                    const data = await response.json()
+                    const token = data.token || data.jwt
+                    if (token) {
+                      setAuthToken(token)
+                      setJwt(token)
+                      console.log('✅ Токен получен через fallback метод после ошибки')
+                    }
+                  }
+                })
+                .catch((err) => {
+                  console.warn('⚠️ Fallback получение токена не удалось:', err.message)
+                })
+              }
               // Устанавливаем ошибку только если это критическая ошибка авторизации
               // Не блокируем работу, если пользователь уже установлен
               if (!hasUser) {
@@ -122,7 +187,8 @@ export const WebAppProvider = ({ children }) => {
             })
           } else {
             console.warn('initData is missing - работаем в режиме разработки')
-            if (!initDataUnsafe?.user) {
+            let currentUser = initDataUnsafe?.user
+            if (!currentUser) {
               const mockUser = {
                 id: 123456789,
                 first_name: 'Тестовый',
@@ -131,10 +197,41 @@ export const WebAppProvider = ({ children }) => {
                 language_code: 'ru',
               }
               setUser(mockUser)
+              currentUser = mockUser
               userWasSet = true
             }
-            // Не устанавливаем ошибку, если пользователь установлен (режим разработки)
-            // setError('Данные инициализации Telegram отсутствуют')
+            
+            // Пытаемся получить токен для mock пользователя (режим разработки)
+            if (currentUser?.id) {
+              console.log('🔄 Попытка получить токен для режима разработки (user_id:', currentUser.id, ')')
+              fetch(API_ENDPOINTS.AUTH, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  user_id: currentUser.id,
+                  dev_mode: true
+                })
+              })
+              .then(async (response) => {
+                if (response.ok) {
+                  const data = await response.json()
+                  const token = data.token || data.jwt
+                  if (token) {
+                    setAuthToken(token)
+                    setJwt(token)
+                    console.log('✅ Токен для режима разработки получен и сохранён')
+                  }
+                } else {
+                  console.warn('⚠️ Не удалось получить токен в режиме разработки, но продолжаем работу')
+                }
+              })
+              .catch((err) => {
+                console.warn('⚠️ Ошибка при получении токена в режиме разработки:', err.message)
+              })
+            }
+            
             isCompleted = true
             clearTimeout(timeoutId)
             setIsLoading(false)
@@ -150,10 +247,39 @@ export const WebAppProvider = ({ children }) => {
           }
           setUser(mockUser)
           userWasSet = true
+          
+          // Получаем токен для mock пользователя
+          console.log('🔄 Попытка получить токен для режима разработки (user_id:', mockUser.id, ')')
+          fetch(API_ENDPOINTS.AUTH, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: mockUser.id,
+              dev_mode: true
+            })
+          })
+          .then(async (response) => {
+            if (response.ok) {
+              const data = await response.json()
+              const token = data.token || data.jwt
+              if (token) {
+                setAuthToken(token)
+                setJwt(token)
+                console.log('✅ Токен для режима разработки получен и сохранён')
+              }
+            } else {
+              const errorText = await response.text()
+              console.warn('⚠️ Не удалось получить токен в режиме разработки:', errorText)
+            }
+          })
+          .catch((err) => {
+            console.warn('⚠️ Ошибка при получении токена в режиме разработки:', err.message)
+          })
+          
           isCompleted = true
           clearTimeout(timeoutId)
-          // Не устанавливаем ошибку в режиме разработки - это нормально
-          // setError('Режим разработки: Telegram Web App не обнаружен')
           setIsLoading(false)
         }
       } catch (err) {
@@ -169,6 +295,32 @@ export const WebAppProvider = ({ children }) => {
           }
           setUser(mockUser)
           userWasSet = true
+          
+          // Пытаемся получить токен для mock пользователя
+          fetch(API_ENDPOINTS.AUTH, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: mockUser.id,
+              dev_mode: true
+            })
+          })
+          .then(async (response) => {
+            if (response.ok) {
+              const data = await response.json()
+              const token = data.token || data.jwt
+              if (token) {
+                setAuthToken(token)
+                setJwt(token)
+                console.log('✅ Токен для режима разработки получен и сохранён (catch)')
+              }
+            }
+          })
+          .catch((authErr) => {
+            console.warn('⚠️ Ошибка при получении токена в catch:', authErr.message)
+          })
         }
         // Не устанавливаем ошибку, чтобы не блокировать работу в режиме разработки
         // setError(err.message || 'Ошибка инициализации')

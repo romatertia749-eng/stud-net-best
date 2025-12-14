@@ -17,6 +17,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class AuthRequest(BaseModel):
     """Запрос на авторизацию"""
     init_data: Optional[str] = None
+    user_id: Optional[int] = None  # Для режима разработки
+    dev_mode: Optional[bool] = False  # Флаг режима разработки
 
 class AuthResponse(BaseModel):
     """Ответ с JWT токеном"""
@@ -44,6 +46,13 @@ async def auth(
     
     if not init_data and request.init_data:
         init_data = request.init_data
+    
+    # Режим разработки: если нет init_data, но есть user_id
+    if not init_data and request.user_id and request.dev_mode:
+        user_id = request.user_id
+        # В режиме разработки создаём токен напрямую без проверки Telegram
+        token = create_jwt_token(user_id)
+        return AuthResponse(token=token, user_id=user_id)
     
     if not init_data:
         raise HTTPException(status_code=400, detail="init_data is required")
