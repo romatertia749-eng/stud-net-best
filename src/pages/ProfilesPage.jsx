@@ -301,6 +301,8 @@ const ProfilesPage = () => {
       
       // #region agent log
       const fetchStart = performance.now()
+      const fetchId = Math.random().toString(36).substr(2, 9)
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:314',message:'fetchProfiles started',data:{fetchId,hasCache:!!cached},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       // Проверяем кэш в localStorage
@@ -356,7 +358,12 @@ const ProfilesPage = () => {
       
       try {
         controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 4000)
+        timeoutId = setTimeout(() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:360',message:'Request timeout',data:{fetchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          controller.abort()
+        }, 4000)
         
         const response = await fetchWithAuth(url, {
           signal: controller.signal,
@@ -442,7 +449,7 @@ const ProfilesPage = () => {
           setLoading(false)
         }
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:508',message:'Total fetchProfiles time',data:{time:performance.now()-fetchStart,hasCache:hasValidCache},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:508',message:'Total fetchProfiles time',data:{fetchId,time:performance.now()-fetchStart,hasCache:hasValidCache,profilesCount:allProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
       }
     }
@@ -451,11 +458,14 @@ const ProfilesPage = () => {
     
     return () => {
       isMounted = false
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       if (controller) {
         controller.abort()
       }
     }
-  }, [isReady, userInfo?.id, activeTab, selectedCity, selectedUniversity, selectedInterests])
+  }, [isReady, userInfo?.id, activeTab, debouncedCity, debouncedUniversity, debouncedInterests])
 
   // Пока что фильтрация не реализована, просто используем все профили
   const filteredProfiles = allProfiles

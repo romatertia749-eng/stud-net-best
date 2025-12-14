@@ -5,6 +5,7 @@ import { useMatches } from '../contexts/MatchContext'
 import { useWebApp } from '../contexts/WebAppContext'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
 import { getAuthToken } from '../utils/api'
+import { processProfiles } from '../utils/profileUtils'
 
 // Мемоизированная карточка профиля для предотвращения лишних ре-рендеров при скролле
 const MatchCard = memo(({ person, onViewProfile, onMessage }) => (
@@ -110,6 +111,12 @@ const NetListPage = () => {
       activeRequestsRef.current += 1
       const requestId = activeRequestsRef.current
       
+      // #region agent log
+      const fetchStart = performance.now()
+      const fetchId = Math.random().toString(36).substr(2, 9)
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:109',message:'fetchMatches started',data:{fetchId,requestId,activeRequests:activeRequestsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       if (!isMounted) {
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
         return
@@ -119,7 +126,12 @@ const NetListPage = () => {
       
       try {
         controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
+        timeoutId = setTimeout(() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:128',message:'Request timeout',data:{fetchId,requestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          controller.abort()
+        }, 8000)
         
         // Используем endpoint для получения мэтчей (взаимных лайков)
         const url = `${API_ENDPOINTS.MATCHES}?user_id=${userId}`
@@ -133,12 +145,20 @@ const NetListPage = () => {
           headers['Authorization'] = `Bearer ${token}`
         }
         
+        // #region agent log
+        const requestStart = performance.now()
+        // #endregion
+        
         const response = await fetch(url, {
           signal: controller.signal,
           headers,
         })
         
         clearTimeout(timeoutId)
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:136',message:'Network request time',data:{fetchId,requestId,time:performance.now()-requestStart,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         
         if (!isMounted) return
         
@@ -153,52 +173,29 @@ const NetListPage = () => {
             return
           }
           
+          // #region agent log
+          const processStart = performance.now()
+          // #endregion
+          
           // Преобразуем данные из API в формат для отображения
-          const formattedMatches = data.map((profile) => {
-            // Безопасная обработка interests
-            let interestsArray = []
-            if (profile?.interests) {
-              if (Array.isArray(profile.interests)) {
-                interestsArray = profile.interests
-              } else if (typeof profile.interests === 'string') {
-                try {
-                  interestsArray = JSON.parse(profile.interests)
-                } catch (e) {
-                  interestsArray = []
-                }
-              }
-            }
-            
-            // Безопасная обработка goals
-            let goalsArray = []
-            if (profile?.goals) {
-              if (Array.isArray(profile.goals)) {
-                goalsArray = profile.goals
-              } else if (typeof profile.goals === 'string') {
-                try {
-                  goalsArray = JSON.parse(profile.goals)
-                } catch (e) {
-                  goalsArray = []
-                }
-              }
-            }
-            
-            const formatted = {
-              id: profile?.id,
-              userId: profile?.user_id || profile?.id,
-              name: profile?.name || '',
-              age: profile?.age || 0,
-              city: profile?.city || '',
-              university: profile?.university || '',
-              bio: profile?.bio || '',
-              interests: interestsArray,
-              goals: goalsArray,
-              photos: profile?.photo_url ? [getPhotoUrl(profile.photo_url)] : [],
-              username: profile?.username || null,
-            }
-            
-            return formatted
-          }).filter(match => match !== null)
+          const processedProfiles = processProfiles(data)
+          const formattedMatches = processedProfiles.map((profile) => ({
+            id: profile?.id,
+            userId: profile?.user_id || profile?.id,
+            name: profile?.name || '',
+            age: profile?.age || 0,
+            city: profile?.city || '',
+            university: profile?.university || '',
+            bio: profile?.bio || '',
+            interests: profile.interests || [],
+            goals: profile.goals || [],
+            photos: profile.photos || [],
+            username: profile?.username || null,
+          })).filter(match => match !== null)
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:157',message:'Profile processing time',data:{fetchId,time:performance.now()-processStart,count:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           
           if (isMounted) {
             setMatchedProfiles(formattedMatches)
@@ -234,6 +231,9 @@ const NetListPage = () => {
         lastUserIdRef.current = userId
       } finally {
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:235',message:'fetchMatches completed',data:{fetchId,requestId,time:performance.now()-fetchStart,activeRequests:activeRequestsRef.current,matchesCount:matchedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         if (isMounted) {
           setLoading(false)
         }
@@ -243,9 +243,16 @@ const NetListPage = () => {
     fetchMatches()
     
     return () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:245',message:'useEffect cleanup',data:{activeRequests:activeRequestsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       isMounted = false
       if (controller) {
         controller.abort()
+      }
+      // Очищаем таймаут если он еще не выполнился
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
     }
   }, [user?.id, setContextMatchedProfiles])
