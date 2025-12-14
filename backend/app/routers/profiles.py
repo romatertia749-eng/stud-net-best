@@ -80,6 +80,39 @@ async def get_profiles(
         logger.error(f"Error getting profiles for swipe: {e}", exc_info=True, extra={"user_id": current_user_id, "page": page, "size": size})
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.get("/incoming-likes")
+async def get_incoming_likes_endpoint(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id_required)
+):
+    """
+    Получение списка пользователей, которые лайкнули текущего пользователя
+    
+    Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
+    """
+    try:
+        logger.info(f"📥 Запрос входящих лайков для user_id={current_user_id}")
+        profiles = get_incoming_likes(db, current_user_id)
+        result = [_profile_to_dict(p) for p in profiles]
+        logger.info(f"✅ Найдено входящих лайков: {len(result)}")
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/user/{user_id}")
+async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(get_db)):
+    """Получение профиля по user_id"""
+    profile = get_profile_by_user_id(db, user_id)
+    
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    result = _profile_to_dict(profile)
+    return JSONResponse(content=result)
+
 @router.get("/{profile_id}")
 async def get_profile_by_id_endpoint(profile_id: int, db: Session = Depends(get_db)):
     """Получение профиля по ID"""
@@ -96,17 +129,6 @@ async def get_profile_by_id_endpoint(profile_id: int, db: Session = Depends(get_
     except Exception as e:
         logger.error(f"Error getting profile by id: {e}", exc_info=True, extra={"profile_id": profile_id})
         raise HTTPException(status_code=500, detail="Internal server error")
-
-@router.get("/user/{user_id}")
-async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(get_db)):
-    """Получение профиля по user_id"""
-    profile = get_profile_by_user_id(db, user_id)
-    
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    
-    result = _profile_to_dict(profile)
-    return JSONResponse(content=result)
 
 @router.post("")
 async def create_or_update_profile_endpoint(
@@ -156,27 +178,4 @@ async def create_or_update_profile_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error creating/updating profile: {e}", exc_info=True, extra={"user_id": current_user_id})
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@router.get("/incoming-likes")
-async def get_incoming_likes_endpoint(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id_required)
-):
-    """
-    Получение списка пользователей, которые лайкнули текущего пользователя
-    
-    Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
-    """
-    try:
-        logger.info(f"📥 Запрос входящих лайков для user_id={current_user_id}")
-        profiles = get_incoming_likes(db, current_user_id)
-        result = [_profile_to_dict(p) for p in profiles]
-        logger.info(f"✅ Найдено входящих лайков: {len(result)}")
-        return JSONResponse(content=result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
         raise HTTPException(status_code=500, detail="Internal server error")
