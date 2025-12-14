@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
   PASS_PROFILE: (id) => `${API_BASE_URL}/api/profiles/${id}/pass`, // Пропуск профиля
   INCOMING_LIKES: `${API_BASE_URL}/api/profiles/incoming-likes`, // Входящие лайки
   RESPOND_TO_LIKE: `${API_BASE_URL}/api/profiles/respond-to-like`, // Ответ на входящий лайк
+  MATCHES: `${API_BASE_URL}/api/matches`, // Список мэтчей (взаимных лайков)
 }
 
 /**

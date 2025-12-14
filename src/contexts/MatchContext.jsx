@@ -48,8 +48,15 @@ export const MatchProvider = ({ children }) => {
     setMatches(prev => prev.filter(m => m.id !== profileId))
   }
 
+  /**
+   * Устанавливает список мэтчей (используется для загрузки с сервера)
+   */
+  const setMatchedProfilesFromServer = (profiles) => {
+    setMatches(profiles)
+  }
+
   return (
-    <MatchContext.Provider value={{ matches, addMatch, removeMatch }}>
+    <MatchContext.Provider value={{ matches, addMatch, removeMatch, setMatchedProfiles: setMatchedProfilesFromServer }}>
       {children}
     </MatchContext.Provider>
   )
