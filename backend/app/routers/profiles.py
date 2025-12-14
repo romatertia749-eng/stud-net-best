@@ -74,7 +74,7 @@ async def get_profiles(
     Возвращает профили, которые пользователь ещё не свайпнул
     """
     profiles = get_profiles_for_swipe(db, user_id, page, size)
-    return profiles
+    return [_normalize_profile_data(p) for p in profiles]
 
 @router.get("/{profile_id}", response_model=ProfileResponse)
 async def get_profile_by_id_endpoint(profile_id: int, db: Session = Depends(get_db)):
@@ -84,7 +84,7 @@ async def get_profile_by_id_endpoint(profile_id: int, db: Session = Depends(get_
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    return profile
+    return _normalize_profile_data(profile)
 
 @router.get("/user/{user_id}", response_model=ProfileResponse)
 async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(get_db)):
@@ -94,7 +94,40 @@ async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(ge
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    return profile
+    return _normalize_profile_data(profile)
+
+def _normalize_profile_data(profile):
+    """Нормализует данные профиля для ответа API"""
+    # Преобразуем interests и goals в списки строк
+    interests = profile.interests if profile.interests else []
+    goals = profile.goals if profile.goals else []
+    
+    # Убеждаемся, что это списки строк
+    if not isinstance(interests, list):
+        interests = []
+    if not isinstance(goals, list):
+        goals = []
+    
+    # Создаём словарь с нормализованными данными
+    profile_dict = {
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "username": profile.username,
+        "first_name": profile.first_name,
+        "last_name": profile.last_name,
+        "name": profile.name,
+        "gender": profile.gender,
+        "age": profile.age,
+        "city": profile.city,
+        "university": profile.university,
+        "interests": [str(item) for item in interests],
+        "goals": [str(item) for item in goals],
+        "bio": profile.bio,
+        "photo_url": profile.photo_url,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+    return ProfileResponse(**profile_dict)
 
 @router.post("", response_model=ProfileResponse)
 async def create_or_update_profile_endpoint(
@@ -120,22 +153,23 @@ async def create_or_update_profile_endpoint(
     """
     try:
         profile = create_or_update_profile(
-        db=db,
-        user_id=user_id,
-        username=username,
-        first_name=first_name,
-        last_name=last_name,
-        name=name,
-        gender=gender,
-        age=age,
-        city=city,
-        university=university,
-        interests=interests,
-        goals=goals,
-        bio=bio,
-        photo=photo
-    )
-        return profile
+            db=db,
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            name=name,
+            gender=gender,
+            age=age,
+            city=city,
+            university=university,
+            interests=interests,
+            goals=goals,
+            bio=bio,
+            photo=photo
+        )
+        # Нормализуем данные перед возвратом
+        return _normalize_profile_data(profile)
     except HTTPException:
         raise
     except Exception as e:
@@ -155,4 +189,4 @@ async def get_incoming_likes_endpoint(
     Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
     """
     profiles = get_incoming_likes(db, user_id)
-    return profiles
+    return [_normalize_profile_data(p) for p in profiles]
