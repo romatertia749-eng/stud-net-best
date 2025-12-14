@@ -159,34 +159,44 @@ def create_or_update_profile(
         return new_profile
 
 def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
-    """Получение списка пользователей, которые лайкнули текущего пользователя (оптимизированная версия)"""
+    """Получение списка пользователей, которые лайкнули текущего пользователя"""
     current_user_profile = get_profile_by_user_id(db, user_id)
     
     if not current_user_profile:
         return []
     
-    # Получаем ID профилей, на которые текущий пользователь уже ответил (сначала выполняем запрос)
+    # Получаем ID профилей, на которые текущий пользователь уже ответил
     responded_profile_ids_list = [row[0] for row in db.query(Swipe.target_profile_id).filter(
         Swipe.user_id == user_id
     ).all()]
     
-    # Получаем профили тех, кто лайкнул текущего пользователя, но текущий пользователь ещё не ответил
-    query = db.query(Profile).join(
-        Swipe,
-        and_(
-            Swipe.target_profile_id == current_user_profile.id,
-            Swipe.action == 'like',
-            Swipe.user_id == Profile.user_id
-        )
-    ).filter(
+    # Получаем user_id тех, кто лайкнул текущего пользователя
+    # (свайпы где target_profile_id = текущий профиль, action = 'like')
+    liker_swipes = db.query(Swipe).filter(
+        Swipe.target_profile_id == current_user_profile.id,
+        Swipe.action == 'like'
+    ).order_by(Swipe.created_at.desc()).all()
+    
+    # Получаем user_id лайкнувших пользователей
+    liker_user_ids = [swipe.user_id for swipe in liker_swipes]
+    
+    if not liker_user_ids:
+        return []
+    
+    # Получаем профили этих пользователей
+    liker_profiles = db.query(Profile).filter(
+        Profile.user_id.in_(liker_user_ids),
         Profile.is_active == True,
         Profile.deleted_at == None
-    )
+    ).all()
     
     # Исключаем профили, на которые уже ответили
     if responded_profile_ids_list:
-        query = query.filter(~Profile.id.in_(responded_profile_ids_list))
+        liker_profiles = [p for p in liker_profiles if p.id not in responded_profile_ids_list]
     
-    liker_profiles = query.order_by(Swipe.created_at.desc()).all()
+    # Сортируем по дате свайпа (сохраняем порядок из liker_swipes)
+    swipe_by_user_id = {swipe.user_id: swipe.created_at for swipe in liker_swipes}
+    from datetime import datetime as dt
+    liker_profiles.sort(key=lambda p: swipe_by_user_id.get(p.user_id, dt.min), reverse=True)
     
     return liker_profiles
