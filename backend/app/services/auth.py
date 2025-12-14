@@ -1,198 +1,103 @@
 """
 Сервис авторизации
 """
-from typing import Optional, Dict
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from jose.utils import base64url_decode
-import json
-import urllib.parse
-import hashlib
 import hmac
+import hashlib
+import json
+from urllib.parse import parse_qsl
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Tuple
+import jwt
 from config import settings
 
-def verify_telegram_webapp_data(init_data: str, bot_token: str) -> Optional[Dict]:
-    """Проверка данных Telegram Web App"""
-    try:
-        # Парсим init_data
-        data_dict = {}
-        for item in init_data.split('&'):
-            if '=' in item:
-                key, value = item.split('=', 1)
-                data_dict[key] = value
-        
-        # Проверяем hash
-        if 'hash' not in data_dict:
-            return None
-        
-        hash_value = data_dict.pop('hash')
-        
-        # Создаём строку для проверки
-        data_check_string = '\n'.join(f"{k}={v}" for k, v in sorted(data_dict.items()))
-        secret_key = hmac.new(
-            key=b"WebAppData",
-            msg=bot_token.encode(),
-            digestmod=hashlib.sha256
-        ).digest()
-        
-        calculated_hash = hmac.new(
-            key=secret_key,
-            msg=data_check_string.encode(),
-            digestmod=hashlib.sha256
-        ).hexdigest()
-        
-        if calculated_hash != hash_value:
-            return None
-        
-        # Парсим user данные
-        if 'user' in data_dict:
-            user_data = json.loads(urllib.parse.unquote(data_dict['user']))
-            return user_data
-        
-        return None
-    except Exception as e:
-        print(f"Error verifying Telegram data: {e}")
-        return None
+TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
+JWT_SECRET = settings.JWT_SECRET_KEY
 
-def extract_user_data_from_init_data(init_data: str) -> Optional[Dict]:
-    """Извлечение данных пользователя из init_data без проверки"""
-    try:
-        for item in init_data.split('&'):
-            if item.startswith('user='):
-                user_data = json.loads(urllib.parse.unquote(item.split('=', 1)[1]))
-                return user_data
-    except:
-        pass
-    return None
+class TelegramAuthError(Exception):
+    pass
 
-def create_jwt_token(user_id: int) -> str:
-    """Создание JWT токена"""
-    import logging
-    logger = logging.getLogger(__name__)
+def validate_init_data(init_data_str: str) -> Dict:
+    """
+    Валидирует инициализационные данные от Telegram Mini App
+    """
+    try:
+        parsed_data = dict(parse_qsl(init_data_str, strict_parsing=True))
+    except ValueError:
+        raise TelegramAuthError("Invalid init data format")
+
+    if 'hash' not in parsed_data:
+        raise TelegramAuthError("Missing hash")
     
-    expire = datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+    received_hash = parsed_data.pop('hash')
     
-    # Убеждаемся, что sub - строка (JWT требует строку)
-    user_id_str = str(user_id)
+    # Создаем строку для проверки подписи
+    data_check_string = '\n'.join(
+        f"{k}={v}" for k, v in sorted(parsed_data.items())
+    )
+    
+    # Генерируем секретный ключ из токена бота
+    secret_key = hmac.new(
+        b'WebAppData',
+        TELEGRAM_BOT_TOKEN.encode(),
+        hashlib.sha256
+    ).digest()
+    
+    # Вычисляем ожидаемый хеш
+    calculated_hash = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Сравниваем хеши
+    if calculated_hash != received_hash:
+        raise TelegramAuthError("Invalid hash - data tampered")
+    
+    # Проверяем свежесть данных (не старше 5 минут)
+    if 'auth_date' in parsed_data:
+        auth_date = int(parsed_data['auth_date'])
+        current_time = int(datetime.now().timestamp())
+        
+        if current_time - auth_date > 300:  # 5 минут
+            raise TelegramAuthError("Init data expired")
+    
+    return parsed_data
+
+def extract_user_id(init_data_str: str) -> Tuple[str, Dict]:
+    """Извлекает ID пользователя из initData"""
+    parsed_data = validate_init_data(init_data_str)
+    
+    if 'user' not in parsed_data:
+        raise TelegramAuthError("User data not found")
+    
+    user_json = json.loads(parsed_data['user'])
+    return str(user_json['id']), user_json
+
+def generate_jwt_token(user_id: str) -> str:
+    """Генерирует JWT токен для пользователя"""
     payload = {
-        "sub": user_id_str,
-        "exp": expire
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(days=7)
     }
-    
-    # Проверяем тип sub перед кодированием
-    if not isinstance(payload["sub"], str):
-        logger.error(f"❌ ОШИБКА: sub не является строкой! Тип: {type(payload['sub'])}, значение: {payload['sub']}")
-        payload["sub"] = str(payload["sub"])
-    
-    # Логируем информацию о ключе (только первые и последние символы для безопасности)
-    secret_key = settings.JWT_SECRET_KEY
-    secret_preview = f"{secret_key[:8]}...{secret_key[-8:]}" if len(secret_key) > 16 else "***"
-    logger.info(f"🔑 Создание токена для user_id={user_id} (sub={user_id_str}, тип={type(user_id_str).__name__}), используемый ключ: {secret_preview}, длина: {len(secret_key)}")
-    
-    token = jwt.encode(payload, secret_key, algorithm=settings.JWT_ALGORITHM)
-    logger.info(f"✅ Токен создан успешно (длина: {len(token)}, payload sub тип: {type(payload.get('sub')).__name__})")
-    return token
+    return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+
+def verify_jwt_token(token: str) -> str:
+    """Проверяет JWT токен"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return payload['user_id']
+    except jwt.ExpiredSignatureError:
+        raise TelegramAuthError("Token expired")
+    except jwt.InvalidTokenError:
+        raise TelegramAuthError("Invalid token")
 
 def decode_jwt_token(token: str) -> Optional[int]:
-    """Декодирование JWT токена и получение user_id"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
+    """Декодирование JWT токена и получение user_id (для dependencies)"""
     try:
-        secret_key = settings.JWT_SECRET_KEY
-        secret_preview = f"{secret_key[:8]}...{secret_key[-8:]}" if len(secret_key) > 16 else "***"
-        logger.info(f"🔐 Декодирование токена (длина токена: {len(token)}, используемый ключ: {secret_preview}, длина ключа: {len(secret_key)})")
-        
-        # Декодируем токен
-        # Библиотека jose проверяет тип sub ДО применения options
-        # Используем обходной путь: декодируем без проверки, затем проверяем подпись отдельно
-        try:
-            # Пробуем стандартное декодирование
-            payload = jwt.decode(
-                token, 
-                secret_key, 
-                algorithms=[settings.JWT_ALGORITHM],
-                options={
-                    "verify_signature": True,
-                    "verify_exp": True,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                    "verify_sub": False
-                }
-            )
-        except JWTError as e:
-            error_str = str(e)
-            # Если ошибка связана с типом sub, используем обходной путь
-            if "Subject must be a string" in error_str:
-                logger.warning(f"⚠️ Обнаружен токен с проблемой типа sub, декодируем вручную")
-                # Разбиваем токен на части
-                parts = token.split('.')
-                if len(parts) != 3:
-                    raise JWTError("Invalid token format")
-                
-                # Декодируем payload вручную (вторая часть)
-                try:
-                    payload_bytes = base64url_decode(parts[1])
-                    payload = json.loads(payload_bytes.decode('utf-8'))
-                except Exception as decode_err:
-                    raise JWTError(f"Failed to decode payload: {decode_err}")
-                
-                # Проверяем подпись вручную
-                from jose.backends import get_backend
-                backend = get_backend(settings.JWT_ALGORITHM)
-                message = f"{parts[0]}.{parts[1]}"
-                signature = parts[2]
-                
-                if not backend.verify(message.encode('utf-8'), signature, secret_key):
-                    raise JWTError("Invalid signature")
-                
-                logger.info(f"✅ Подпись токена проверена вручную")
-                
-                # Проверяем exp вручную
-                if 'exp' in payload:
-                    exp = payload.get('exp')
-                    if exp:
-                        exp_timestamp = exp if isinstance(exp, (int, float)) else float(exp)
-                        current_timestamp = datetime.utcnow().timestamp()
-                        if current_timestamp > exp_timestamp:
-                            raise JWTError("Token expired")
-                        logger.info(f"✅ Токен не истёк (exp: {exp_timestamp}, текущее время: {current_timestamp})")
-            else:
-                raise
-        
-        logger.info(f"📋 Декодированный payload: sub={payload.get('sub')}, тип sub: {type(payload.get('sub')).__name__}")
-        
-        # sub может быть строкой или числом (для совместимости со старыми токенами)
-        user_id_value = payload.get("sub")
-        if user_id_value is None:
-            logger.warning("❌ Токен не содержит 'sub'")
-            return None
-        
-        # Преобразуем в int (может быть строкой или числом)
-        try:
-            if isinstance(user_id_value, str):
-                user_id: int = int(user_id_value)
-            elif isinstance(user_id_value, int):
-                user_id = user_id_value
-            else:
-                logger.warning(f"❌ Неожиданный тип sub: {type(user_id_value)}")
-                return None
-                
-            logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
-            return user_id
-        except (ValueError, TypeError) as e:
-            logger.warning(f"❌ Не удалось преобразовать 'sub' в int: {user_id_value} (тип: {type(user_id_value).__name__}), ошибка: {e}")
-            return None
-        if user_id_str is None:
-            logger.warning("❌ Токен не содержит 'sub'")
-            return None
-        
-    except JWTError as e:
-        logger.warning(f"❌ Ошибка декодирования токена: {type(e).__name__}: {str(e)}")
-        # Дополнительная информация для отладки
-        secret_key = settings.JWT_SECRET_KEY
-        logger.warning(f"   Используемый ключ (первые 8 символов): {secret_key[:8]}...")
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        if user_id:
+            return int(user_id)
         return None
-    except Exception as e:
-        logger.error(f"❌ Неожиданная ошибка при декодировании токена: {type(e).__name__}: {str(e)}")
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, ValueError, TypeError):
         return None
