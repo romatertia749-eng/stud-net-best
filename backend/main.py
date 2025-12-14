@@ -9,6 +9,33 @@ FastAPI Backend для StudNet - приложения нетворкинга
 - Загрузка фотографий
 """
 
+import sys
+import re
+
+# Подавляем предупреждения ImageKit
+class FilteredStderr:
+    def __init__(self, original_stderr):
+        self.original_stderr = original_stderr
+        self.buffer = ''
+    
+    def write(self, message):
+        self.buffer += message
+        if '\n' in self.buffer:
+            lines = self.buffer.split('\n')
+            self.buffer = lines[-1]
+            for line in lines[:-1]:
+                if 'ImageKit' not in line and 'IMAGEKIT' not in line:
+                    self.original_stderr.write(line + '\n')
+    
+    def flush(self):
+        if self.buffer and 'ImageKit' not in self.buffer and 'IMAGEKIT' not in self.buffer:
+            self.original_stderr.write(self.buffer)
+            self.buffer = ''
+        self.original_stderr.flush()
+
+# Применяем фильтр к stderr
+sys.stderr = FilteredStderr(sys.stderr)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

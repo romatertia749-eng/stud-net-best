@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 from app.dependencies import get_db
-from app.models import ProfileResponse
 from app.services.match_service import (
     like_profile,
     pass_profile,
@@ -91,7 +90,7 @@ async def respond_to_like_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/matches", response_model=List[ProfileResponse])
+@router.get("/matches")
 async def get_matches_endpoint(
     user_id: int = Query(..., description="ID пользователя"),
     db: Session = Depends(get_db)
@@ -101,5 +100,6 @@ async def get_matches_endpoint(
     
     Возвращает профили пользователей, с которыми есть взаимный лайк (мэтч)
     """
+    from app.routers.profiles import _profile_to_dict
     profiles = get_matches(db, user_id)
-    return [ProfileResponse.from_profile(p) for p in profiles]
+    return [_profile_to_dict(p) for p in profiles]
