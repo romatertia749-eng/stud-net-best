@@ -1,5 +1,6 @@
 -- ============================================================================
 -- Схема базы данных для приложения нетворкинга StudNet
+-- ОПТИМИЗИРОВАНА для максимальной производительности загрузки
 -- ============================================================================
 -- Создание базы данных (выполнить от имени postgres)
 -- CREATE DATABASE networking_app;
@@ -42,13 +43,14 @@ CREATE TABLE IF NOT EXISTS profiles (
     CONSTRAINT goals_is_array CHECK (jsonb_typeof(goals) = 'array')
 );
 
--- Индексы для таблицы profiles
+-- Индексы для таблицы profiles (оптимизированные для быстрой загрузки)
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_city ON profiles(city);
 CREATE INDEX IF NOT EXISTS idx_profiles_university ON profiles(university);
 CREATE INDEX IF NOT EXISTS idx_profiles_gender ON profiles(gender);
 CREATE INDEX IF NOT EXISTS idx_profiles_age ON profiles(age);
-CREATE INDEX IF NOT EXISTS idx_profiles_created_at ON profiles(created_at);
+-- Индекс для сортировки по дате создания (DESC) - оптимизация из рекомендаций
+CREATE INDEX IF NOT EXISTS idx_profiles_created_at_desc ON profiles(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON profiles(is_active) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_profiles_deleted_at ON profiles(deleted_at) WHERE deleted_at IS NULL;
 
@@ -77,10 +79,13 @@ CREATE INDEX IF NOT EXISTS idx_swipes_target_profile_id ON swipes(target_profile
 CREATE INDEX IF NOT EXISTS idx_swipes_action ON swipes(action);
 CREATE INDEX IF NOT EXISTS idx_swipes_created_at ON swipes(created_at);
 
--- Составные индексы для оптимизации частых запросов
+-- Составные индексы для оптимизации частых запросов (оптимизация из рекомендаций)
 CREATE INDEX IF NOT EXISTS idx_swipes_user_target ON swipes(user_id, target_profile_id);
+-- Индекс для быстрого поиска лайков (аналог matched=true из рекомендаций)
 CREATE INDEX IF NOT EXISTS idx_swipes_target_action ON swipes(target_profile_id, action) WHERE action = 'like';
 CREATE INDEX IF NOT EXISTS idx_swipes_user_action ON swipes(user_id, action) WHERE action = 'like';
+-- Дополнительный индекс для поиска входящих лайков (оптимизация)
+CREATE INDEX IF NOT EXISTS idx_swipes_target_like_created ON swipes(target_profile_id, created_at DESC) WHERE action = 'like';
 
 -- Таблица мэтчей (взаимные лайки)
 CREATE TABLE IF NOT EXISTS matches (
@@ -94,10 +99,12 @@ CREATE TABLE IF NOT EXISTS matches (
     FOREIGN KEY (user2_id) REFERENCES profiles(user_id) ON DELETE CASCADE
 );
 
--- Индексы для таблицы matches
+-- Индексы для таблицы matches (оптимизированные для быстрой загрузки)
 CREATE INDEX IF NOT EXISTS idx_matches_user1_id ON matches(user1_id);
 CREATE INDEX IF NOT EXISTS idx_matches_user2_id ON matches(user2_id);
 CREATE INDEX IF NOT EXISTS idx_matches_matched_at ON matches(matched_at);
+-- Индекс для сортировки по дате мэтча (DESC) - оптимизация из рекомендаций
+CREATE INDEX IF NOT EXISTS idx_matches_matched_at_desc ON matches(matched_at DESC);
 
 -- Составной индекс для поиска мэтчей (ускоряет запросы с OR условием)
 CREATE INDEX IF NOT EXISTS idx_matches_user1_user2 ON matches(user1_id, user2_id);

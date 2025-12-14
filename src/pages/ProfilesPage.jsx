@@ -287,7 +287,7 @@ const ProfilesPage = () => {
       setIncomingLikes([])
       fetchIncomingLikes()
     }
-  }, [activeTab, isReady, userInfo?.id])
+  }, [activeTab, isReady, userInfo])
 
   /**
    * Основной эффект для загрузки профилей с сервера
@@ -538,7 +538,7 @@ const ProfilesPage = () => {
         controller = null
       }
     }
-  }, [isReady, userInfo?.id, activeTab, debouncedCity, debouncedUniversity, debouncedInterests])
+  }, [isReady, userInfo, activeTab, debouncedCity, debouncedUniversity, debouncedInterests])
 
   // Пока что фильтрация не реализована, просто используем все профили
   const filteredProfiles = allProfiles
@@ -698,13 +698,14 @@ const ProfilesPage = () => {
       // В режиме разработки (без авторизации) просто добавляем в мэтчи
       addMatch(currentProfile)
     }
-  }, [isEffectActive, currentProfile, activeTab, incomingLikes.length, availableProfiles.length, userInfo?.id, addMatch])
+  }, [isEffectActive, currentProfile, activeTab, incomingLikes.length, availableProfiles.length, userInfo, addMatch])
 
   /**
    * Обработчик пропуска (свайп влево)
    * Отправляет запрос на сервер о том, что пользователь пропустил профиль
    */
-  const handlePass = async () => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handlePass = useCallback(async () => {
     // Защита от двойного срабатывания
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
@@ -757,13 +758,13 @@ const ProfilesPage = () => {
         console.error('Error passing profile:', error)
       }
     }
-  }, [isEffectActive, currentProfile, activeTab, incomingLikes, availableProfiles, userInfo])
+  }, [isEffectActive, currentProfile, activeTab, incomingLikes.length, availableProfiles.length, userInfo])
 
   /**
    * Обработчик начала касания (для свайпа на мобильных устройствах)
    * Сохраняет начальные координаты касания
    */
-  const handleTouchStart = (e) => {
+  const handleTouchStart = useCallback((e) => {
     // Блокируем свайп, если идёт анимация или обработка
     if (isEffectActive || isProcessingSwipe.current) {
       e.preventDefault()
@@ -774,7 +775,7 @@ const ProfilesPage = () => {
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
     setSwipeOffset(0) // Сбрасываем смещение
-  }, [isEffectActive, isProcessingSwipe])
+  }, [isEffectActive])
 
   /**
    * Обработчик движения пальца при свайпе
@@ -814,7 +815,7 @@ const ProfilesPage = () => {
    * Обработчик окончания касания
    * Определяет, был ли это свайп, и вызывает соответствующий обработчик
    */
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
     if (isEffectActive || isProcessingSwipe.current) {
       // Сбрасываем всё, если идёт обработка
       setSwipeOffset(0)
@@ -854,6 +855,7 @@ const ProfilesPage = () => {
     touchStartY.current = 0
     touchEndX.current = 0
     touchEndY.current = 0
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEffectActive, handlePass, handleLike])
 
   if (loading) {

@@ -8,12 +8,15 @@ from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 from config import settings
 
-# Подключение к базе данных с оптимизацией пула соединений
+# Подключение к базе данных с оптимизацией пула соединений (по рекомендациям)
+from sqlalchemy.pool import QueuePool
+
 engine = create_engine(
     settings.DATABASE_URL,
+    poolclass=QueuePool,  # Явно указываем QueuePool для лучшей производительности
     pool_pre_ping=True,  # Проверка соединений перед использованием
-    pool_size=5,  # Размер пула соединений
-    max_overflow=10,  # Максимальное количество дополнительных соединений
+    pool_size=10,  # Увеличен размер пула (рекомендация: 10)
+    max_overflow=20,  # Увеличено максимальное количество дополнительных соединений (рекомендация: 20)
     pool_recycle=3600,  # Переиспользование соединений каждый час
     echo=False  # Логирование SQL запросов (отключено для продакшена)
 )
