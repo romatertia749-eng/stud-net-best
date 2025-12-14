@@ -238,6 +238,14 @@ const ProfileEditPage = () => {
               isExisting: true 
             }] : [],
           })
+        } else if (response.status === 401) {
+          const errorText = await response.text()
+          clearAuthToken()
+          localStorage.removeItem(cacheKey)
+          if (!hasValidCache) {
+            navigate('/profile', { replace: true })
+          }
+          alert('Токен авторизации недействителен. Пожалуйста, обновите страницу (F5) для повторной авторизации.')
         } else if (response.status === 404) {
           if (!hasValidCache) {
             navigate('/profile', { replace: true })
@@ -543,8 +551,10 @@ const ProfileEditPage = () => {
             errorMessage = errorText || 'Токен авторизации недействителен'
           }
           
-          // Очищаем токен и предлагаем переавторизоваться
+          // Очищаем токен и кэш профиля, предлагаем переавторизоваться
           clearAuthToken()
+          const cacheKey = `profile_${user.id}`
+          localStorage.removeItem(cacheKey)
           alert(`${errorMessage}\n\nПожалуйста, обновите страницу (F5) для повторной авторизации.`)
           setLoading(false)
           return

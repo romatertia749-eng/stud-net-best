@@ -4,7 +4,7 @@ import { useWebApp } from '../contexts/WebAppContext'
 import { Card, Button, Autocomplete, MultiSelect } from '../components'
 import { russianCities, universities, interests, goals } from '../data/formData'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
-import { getAuthToken } from '../utils/api'
+import { getAuthToken, clearAuthToken } from '../utils/api'
 
 /**
  * ProfilePage - страница профиля пользователя
@@ -191,6 +191,14 @@ const ProfilePage = () => {
             expires: Date.now() + 30 * 60 * 1000
           }))
           localStorage.setItem('last_user_id', user.id.toString())
+        } else if (response.status === 401) {
+          const errorText = await response.text()
+          clearAuthToken()
+          localStorage.removeItem(cacheKey)
+          if (!hasValidCache) {
+            setIsEditing(false)
+          }
+          alert('Токен авторизации недействителен. Пожалуйста, обновите страницу (F5) для повторной авторизации.')
         } else if (response.status === 404) {
           if (!hasValidCache) {
             setIsEditing(false)
@@ -437,13 +445,31 @@ const ProfilePage = () => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000)
 
+      const token = jwt || getAuthToken()
+      if (!token) {
+        const errorMsg = 'Ошибка: токен авторизации не найден.\n\n' +
+          'Возможные причины:\n' +
+          '1. Авторизация не прошла успешно\n' +
+          '2. Токен был удалён из localStorage\n\n' +
+          'Попробуйте обновить страницу (F5) или перезапустить приложение в Telegram.'
+        alert(errorMsg)
+        setLoading(false)
+        return
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      }
+
       let response
       try {
         response = await fetch(apiUrl, {
           method: 'POST',
+          headers: headers,
           body: formDataToSend,
           signal: controller.signal,
           mode: 'cors',
+          credentials: 'include',
         })
         clearTimeout(timeoutId)
       } catch (fetchError) {
@@ -484,6 +510,24 @@ const ProfilePage = () => {
         setProfileData(updatedProfileData)
         setIsEditing(true)
       } else {
+        if (response.status === 401) {
+          const errorText = await response.text()
+          let errorMessage = 'Ошибка авторизации'
+          try {
+            const errorData = JSON.parse(errorText)
+            errorMessage = errorData.detail || 'Токен авторизации недействителен'
+          } catch {
+            errorMessage = errorText || 'Токен авторизации недействителен'
+          }
+          
+          clearAuthToken()
+          const cacheKey = `profile_${user.id}`
+          localStorage.removeItem(cacheKey)
+          alert(`${errorMessage}\n\nПожалуйста, обновите страницу (F5) для повторной авторизации.`)
+          setLoading(false)
+          return
+        }
+        
         const errorText = await response.text()
         
         let errorMessage = 'Ошибка при сохранении профиля'
