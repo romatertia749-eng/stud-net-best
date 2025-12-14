@@ -2,10 +2,11 @@
 Роутер для работы с профилями
 """
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import json
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user_id_required
 from app.services.profile_service import (
     get_profile_by_user_id,
     get_profile_by_id,
@@ -52,28 +53,46 @@ def _profile_to_dict(profile):
 
 @router.get("")
 async def get_profiles(
-    user_id: int = Query(..., description="ID пользователя"),
     page: int = Query(0, ge=0),
     size: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id_required)
 ):
     """
     Получение списка профилей для свайпа
     
     Возвращает профили, которые пользователь ещё не свайпнул
     """
-    profiles = get_profiles_for_swipe(db, user_id, page, size)
-    return [_profile_to_dict(p) for p in profiles]
+    try:
+        profiles = get_profiles_for_swipe(db, current_user_id, page, size)
+        result = [_profile_to_dict(p) for p in profiles]
+        return JSONResponse(content={
+            "items": result,
+            "page": page,
+            "size": size,
+            "total": len(result),
+            "has_more": len(result) == size
+        })
+    except Exception as e:
+        logger.error(f"Error getting profiles for swipe: {e}", exc_info=True, extra={"user_id": current_user_id, "page": page, "size": size})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{profile_id}")
 async def get_profile_by_id_endpoint(profile_id: int, db: Session = Depends(get_db)):
     """Получение профиля по ID"""
-    profile = get_profile_by_id(db, profile_id)
-    
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    
-    return _profile_to_dict(profile)
+    try:
+        profile = get_profile_by_id(db, profile_id)
+        
+        if not profile:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        
+        result = _profile_to_dict(profile)
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting profile by id: {e}", exc_info=True, extra={"profile_id": profile_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/user/{user_id}")
 async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(get_db)):
@@ -83,11 +102,11 @@ async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(ge
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    return _profile_to_dict(profile)
+    result = _profile_to_dict(profile)
+    return JSONResponse(content=result)
 
 @router.post("")
 async def create_or_update_profile_endpoint(
-    user_id: int = Form(...),
     username: Optional[str] = Form(None),
     first_name: Optional[str] = Form(None),
     last_name: Optional[str] = Form(None),
@@ -100,7 +119,8 @@ async def create_or_update_profile_endpoint(
     goals: str = Form(...),
     bio: Optional[str] = Form(None),
     photo: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id_required)
 ):
     """
     Создание или обновление профиля
@@ -110,7 +130,7 @@ async def create_or_update_profile_endpoint(
     try:
         profile = create_or_update_profile(
             db=db,
-            user_id=user_id,
+            user_id=current_user_id,
             username=username,
             first_name=first_name,
             last_name=last_name,
@@ -125,24 +145,28 @@ async def create_or_update_profile_endpoint(
             photo=photo
         )
         
-        return _profile_to_dict(profile)
+        result = _profile_to_dict(profile)
+        return JSONResponse(content=result)
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Ошибка при создании/обновлении профиля: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении профиля: {str(e)}")
+        logger.error(f"Error creating/updating profile: {e}", exc_info=True, extra={"user_id": current_user_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/incoming-likes")
 async def get_incoming_likes_endpoint(
-    user_id: int = Query(..., description="ID пользователя"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id_required)
 ):
     """
     Получение списка пользователей, которые лайкнули текущего пользователя
     
     Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
     """
-    profiles = get_incoming_likes(db, user_id)
-    return [_profile_to_dict(p) for p in profiles]
+    try:
+        profiles = get_incoming_likes(db, current_user_id)
+        result = [_profile_to_dict(p) for p in profiles]
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
+        raise HTTPException(status_code=500, detail="Internal server error")

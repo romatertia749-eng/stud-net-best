@@ -2,7 +2,7 @@
 Сервис для работы с профилями
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, not_
 from typing import List, Optional
 from datetime import datetime
 import json
@@ -141,39 +141,31 @@ def create_or_update_profile(
         return new_profile
 
 def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
-    """Получение списка пользователей, которые лайкнули текущего пользователя"""
+    """Получение списка пользователей, которые лайкнули текущего пользователя (оптимизированная версия)"""
     current_user_profile = get_profile_by_user_id(db, user_id)
     
     if not current_user_profile:
         return []
     
-    # Получаем свайпы, где текущий пользователь был целью
-    incoming_swipes = db.query(Swipe).filter(
-        Swipe.target_profile_id == current_user_profile.id,
-        Swipe.action == 'like'
-    ).all()
+    # Оптимизированный запрос с JOIN и NOT EXISTS вместо множественных запросов
+    from sqlalchemy import not_
     
-    # Получаем user_id тех, кто лайкнул текущего пользователя
-    liker_user_ids = [swipe.user_id for swipe in incoming_swipes]
-    
-    if not liker_user_ids:
-        return []
-    
-    # Получаем ID профилей, на которые текущий пользователь уже ответил
-    responded_profile_ids = [
-        row[0] for row in db.query(Swipe.target_profile_id).filter(
-            Swipe.user_id == user_id
-        ).all()
-    ]
-    
-    # Получаем профили тех, кто лайкнул
-    liker_profiles = db.query(Profile).filter(
-        Profile.user_id.in_(liker_user_ids),
+    liker_profiles = db.query(Profile).join(
+        Swipe,
+        and_(
+            Swipe.target_profile_id == current_user_profile.id,
+            Swipe.action == 'like',
+            Swipe.user_id == Profile.user_id
+        )
+    ).filter(
         Profile.is_active == True,
-        Profile.deleted_at == None
-    ).all()
+        Profile.deleted_at == None,
+        not_(
+            db.query(Swipe).filter(
+                Swipe.user_id == user_id,
+                Swipe.target_profile_id == Profile.id
+            ).exists()
+        )
+    ).order_by(Swipe.created_at.desc()).all()
     
-    # Фильтруем: убираем тех, на кого пользователь уже ответил
-    result_profiles = [p for p in liker_profiles if p.id not in responded_profile_ids]
-    
-    return result_profiles
+    return liker_profiles

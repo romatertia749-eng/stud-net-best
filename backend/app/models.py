@@ -2,7 +2,7 @@
 Общие Pydantic модели для API
 """
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 import json
 
@@ -64,3 +64,39 @@ class ProfileResponse(BaseModel):
     
     class Config:
         from_attributes = False
+
+class ProfileCreateRequest(BaseModel):
+    """Модель для создания/обновления профиля"""
+    name: str = Field(..., min_length=1, max_length=255, description="Имя пользователя")
+    gender: str = Field(..., pattern="^(male|female|other)$", description="Пол")
+    age: int = Field(..., ge=15, le=50, description="Возраст")
+    city: str = Field(..., min_length=1, max_length=255, description="Город")
+    university: str = Field(..., min_length=1, max_length=255, description="Университет")
+    interests: str = Field(..., description="JSON массив интересов")
+    goals: str = Field(..., description="JSON массив целей")
+    username: Optional[str] = Field(None, max_length=255)
+    first_name: Optional[str] = Field(None, max_length=255)
+    last_name: Optional[str] = Field(None, max_length=255)
+    bio: Optional[str] = Field(None, max_length=300, description="Биография (максимум 300 символов)")
+    
+    @field_validator('interests', 'goals')
+    @classmethod
+    def validate_json_array(cls, v):
+        """Валидирует, что строка является валидным JSON массивом"""
+        if not v:
+            return "[]"
+        try:
+            parsed = json.loads(v)
+            if not isinstance(parsed, list):
+                raise ValueError("Must be a JSON array")
+            return v
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON format")
+    
+    @field_validator('bio')
+    @classmethod
+    def validate_bio_length(cls, v):
+        """Валидирует длину биографии"""
+        if v and len(v) > 300:
+            raise ValueError("Bio must be 300 characters or less")
+        return v

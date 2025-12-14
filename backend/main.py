@@ -39,10 +39,17 @@ sys.stderr = FilteredStderr(sys.stderr)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import logging
 
 from config import settings
 from app.routers import auth, profiles, matches, debug
 from app.services.file_storage import UPLOAD_DIR
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Инициализация FastAPI приложения
 app = FastAPI(

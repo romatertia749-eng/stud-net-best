@@ -8,8 +8,15 @@ from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 from config import settings
 
-# Подключение к базе данных
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+# Подключение к базе данных с оптимизацией пула соединений
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,  # Проверка соединений перед использованием
+    pool_size=5,  # Размер пула соединений
+    max_overflow=10,  # Максимальное количество дополнительных соединений
+    pool_recycle=3600,  # Переиспользование соединений каждый час
+    echo=False  # Логирование SQL запросов (отключено для продакшена)
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

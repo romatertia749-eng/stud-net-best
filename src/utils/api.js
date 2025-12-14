@@ -53,10 +53,14 @@ const getAuthHeaders = () => {
 }
 
 /**
- * Базовая функция для выполнения запросов к API
+ * Базовая функция для выполнения запросов к API с retry логикой
  * Автоматически добавляет авторизацию и обрабатывает ошибки
  */
-export const apiRequest = async (endpoint, options = {}) => {
+export const apiRequest = async (endpoint, options = {}, retryCount = 0) => {
+  const maxRetries = options.maxRetries ?? 2
+  const retryDelay = options.retryDelay ?? 1000
+  const timeout = options.timeout ?? 30000
+  
   // Если endpoint уже полный URL, используем его, иначе добавляем базовый URL
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`
   
@@ -70,22 +74,69 @@ export const apiRequest = async (endpoint, options = {}) => {
     delete headers['Content-Type']
   }
   
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    mode: options.mode || 'cors',
-    credentials: 'include',
-  })
-  
-  // Обработка ошибок
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ 
-      message: `HTTP error! status: ${response.status}` 
-    }))
-    throw new Error(error.message || `HTTP error! status: ${response.status}`)
+  try {
+    // Создаём AbortController для таймаута
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      mode: options.mode || 'cors',
+      credentials: 'include',
+      signal: controller.signal,
+    })
+    
+    clearTimeout(timeoutId)
+    
+    // Обработка ошибок
+    if (!response.ok) {
+      // Если 401, очищаем токен
+      if (response.status === 401) {
+        clearAuthToken()
+        throw new Error('Unauthorized. Please login again.')
+      }
+      
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = { 
+          detail: response.statusText || `HTTP error! status: ${response.status}` 
+        }
+      }
+      
+      const errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`
+      
+      // Retry для 5xx ошибок
+      if (response.status >= 500 && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)))
+        return apiRequest(endpoint, options, retryCount + 1)
+      }
+      
+      const error = new Error(errorMessage)
+      error.status = response.status
+      error.data = errorData
+      throw error
+    }
+    
+    return response.json()
+  } catch (error) {
+    // Retry для сетевых ошибок и таймаутов
+    if (
+      (error.name === 'AbortError' || error.name === 'TypeError' || error.message.includes('fetch')) &&
+      retryCount < maxRetries
+    ) {
+      await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)))
+      return apiRequest(endpoint, options, retryCount + 1)
+    }
+    
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.')
+    }
+    
+    throw error
   }
-  
-  return response.json()
 }
 
 /**

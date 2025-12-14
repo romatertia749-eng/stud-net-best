@@ -339,7 +339,7 @@ const ProfilesPage = () => {
       const baseUrl = API_ENDPOINTS.PROFILES.endsWith('/') 
         ? API_ENDPOINTS.PROFILES.slice(0, -1) 
         : API_ENDPOINTS.PROFILES
-      const url = `${baseUrl}?user_id=${userInfo.id}&page=0&size=50`
+      const url = `${baseUrl}?page=0&size=50`
       
       // Показываем индикатор загрузки только если нет валидного кэша
       if (!hasValidCache) {
@@ -389,6 +389,8 @@ const ProfilesPage = () => {
           let profiles = []
           if (Array.isArray(data)) {
             profiles = data
+          } else if (data.items && Array.isArray(data.items)) {
+            profiles = data.items
           } else if (Array.isArray(data.content)) {
             profiles = data.content
           } else if (data.content && typeof data.content === 'object') {
