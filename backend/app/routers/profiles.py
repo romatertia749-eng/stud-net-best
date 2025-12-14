@@ -4,6 +4,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional, List
+import json
 from app.dependencies import get_db
 from app.models import ProfileResponse
 from app.services.profile_service import (
@@ -51,7 +52,7 @@ async def get_profile_by_user_id_endpoint(user_id: int, db: Session = Depends(ge
     
     return ProfileResponse.from_profile(profile)
 
-@router.post("", response_model=ProfileResponse)
+@router.post("")
 async def create_or_update_profile_endpoint(
     user_id: int = Form(...),
     username: Optional[str] = Form(None),
@@ -90,8 +91,44 @@ async def create_or_update_profile_endpoint(
             bio=bio,
             photo=photo
         )
-        # Нормализуем данные перед возвратом
-        return ProfileResponse.from_profile(profile)
+        
+        # Преобразуем данные напрямую в словарь, обходя Pydantic валидацию
+        def normalize_field(value):
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return [str(item) for item in value]
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return [str(item) for item in parsed] if isinstance(parsed, list) else []
+                except:
+                    return []
+            return []
+        
+        interests_normalized = normalize_field(profile.interests)
+        goals_normalized = normalize_field(profile.goals)
+        
+        result = {
+            "id": profile.id,
+            "user_id": profile.user_id,
+            "username": profile.username,
+            "first_name": profile.first_name,
+            "last_name": profile.last_name,
+            "name": profile.name,
+            "gender": profile.gender,
+            "age": profile.age,
+            "city": profile.city,
+            "university": profile.university,
+            "interests": interests_normalized,
+            "goals": goals_normalized,
+            "bio": profile.bio,
+            "photo_url": profile.photo_url,
+            "created_at": profile.created_at.isoformat() if profile.created_at else None,
+            "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        }
+        
+        return result
     except HTTPException:
         raise
     except Exception as e:
