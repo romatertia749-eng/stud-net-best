@@ -3,12 +3,10 @@
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel
-from datetime import datetime
-
-from app.database import Profile
 from app.dependencies import get_db
+from app.models import ProfileResponse
 from app.services.match_service import (
     like_profile,
     pass_profile,
@@ -18,28 +16,6 @@ from app.services.match_service import (
 from app.services.profile_service import get_profile_by_user_id
 
 router = APIRouter(prefix="/api", tags=["matches"])
-
-class ProfileResponse(BaseModel):
-    """Ответ с данными профиля"""
-    id: int
-    user_id: int
-    username: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    name: str
-    gender: str
-    age: int
-    city: str
-    university: str
-    interests: List[str] = []
-    goals: List[str] = []
-    bio: Optional[str] = None
-    photo_url: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 class LikeRequest(BaseModel):
     """Запрос на лайк"""
@@ -126,4 +102,4 @@ async def get_matches_endpoint(
     Возвращает профили пользователей, с которыми есть взаимный лайк (мэтч)
     """
     profiles = get_matches(db, user_id)
-    return profiles
+    return [ProfileResponse.from_profile(p) for p in profiles]
