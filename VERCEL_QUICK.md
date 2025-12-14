@@ -11,9 +11,9 @@
 ### 2. Обнови CORS в Koyeb
 После получения URL от Vercel:
 - Koyeb → **Settings → Environment Variables**
-- Обнови `CORS_ORIGINS`:
+- Обнови `CORS_ORIGINS` (включи Telegram домены):
   ```
-  http://localhost:5173,https://твой-домен.vercel.app
+  http://localhost:5173,https://stud-net-best.vercel.app,https://web.telegram.org,https://webk.telegram.org,https://webz.telegram.org
   ```
 
 ### 3. Готово! 🎉

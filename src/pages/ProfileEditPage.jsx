@@ -445,11 +445,20 @@ const ProfileEditPage = () => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000)
 
+      // Получаем токен для авторизации
+      const token = getAuthToken()
+      const headers = {}
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       let response
       try {
         // Для FormData не нужно указывать Content-Type - браузер сам установит
         response = await fetch(apiUrl, {
           method: 'POST',
+          headers: headers,
           body: formDataToSend,
           signal: controller.signal,
           mode: 'cors',

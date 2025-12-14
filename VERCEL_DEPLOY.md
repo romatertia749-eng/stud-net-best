@@ -49,13 +49,15 @@ Vercel автоматически определит:
 
 1. Зайди в Koyeb Dashboard
 2. Перейди в **Settings → Environment Variables**
-3. Обнови `CORS_ORIGINS`:
+3. Обнови `CORS_ORIGINS` (включи Telegram домены для Mini Apps):
    ```
-   http://localhost:5173,https://stud-net-xxx.vercel.app
+   http://localhost:5173,https://stud-net-best.vercel.app,https://web.telegram.org,https://webk.telegram.org,https://webz.telegram.org
    ```
-   (замени `stud-net-xxx.vercel.app` на твой реальный домен Vercel)
+   (замени `stud-net-best.vercel.app` на твой реальный домен Vercel, если отличается)
 
 4. Перезапусти приложение в Koyeb (или подожди автоматического перезапуска)
+
+**Важно**: Telegram домены (`web.telegram.org`, `webk.telegram.org`, `webz.telegram.org`) необходимы для работы Mini Apps в Telegram
 
 ### 7. Настройка кастомного домена (опционально)
 
