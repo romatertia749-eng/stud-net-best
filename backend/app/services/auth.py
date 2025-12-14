@@ -8,10 +8,14 @@ from urllib.parse import parse_qsl
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple
 import jwt
-from config import settings
+import os
+from dotenv import load_dotenv
 
-TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
-JWT_SECRET = settings.JWT_SECRET_KEY
+# Загружаем переменные из .env файла
+load_dotenv()
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
 
 class TelegramAuthError(Exception):
     pass
