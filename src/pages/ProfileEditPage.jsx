@@ -4,7 +4,7 @@ import { useWebApp } from '../contexts/WebAppContext'
 import { Card, Button, Autocomplete, MultiSelect } from '../components'
 import { russianCities, universities, interests, goals } from '../data/formData'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
-import { getAuthToken } from '../utils/api'
+import { getAuthToken, clearAuthToken } from '../utils/api'
 
 /**
  * ProfileEditPage - страница редактирования профиля
@@ -41,6 +41,14 @@ const ProfileEditPage = () => {
   const [errors, setErrors] = useState({})
 
   useEffect(() => {
+    // Проверяем наличие токена при загрузке
+    const token = getAuthToken()
+    if (!token) {
+      console.warn('⚠️ Токен авторизации отсутствует при загрузке страницы')
+    } else {
+      console.log('✅ Токен авторизации найден при загрузке страницы')
+    }
+    
     const lastUserId = localStorage.getItem('last_user_id')
     if (lastUserId) {
       const cacheKey = `profile_${lastUserId}`
@@ -447,11 +455,31 @@ const ProfileEditPage = () => {
 
       // Получаем токен для авторизации
       const token = getAuthToken()
-      const headers = {}
+      console.log('🔑 Проверка токена:', {
+        hasToken: !!token,
+        tokenLength: token?.length || 0,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'НЕТ ТОКЕНА'
+      })
       
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
+      if (!token) {
+        const errorMsg = 'Ошибка: токен авторизации не найден.\n\n' +
+          'Возможные причины:\n' +
+          '1. Авторизация не прошла успешно\n' +
+          '2. Токен был удалён из localStorage\n\n' +
+          'Попробуйте обновить страницу (F5) или перезапустить приложение в Telegram.'
+        alert(errorMsg)
+        setLoading(false)
+        return
       }
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      }
+      
+      console.log('📤 Заголовки запроса:', {
+        hasAuthorization: !!headers['Authorization'],
+        authorizationPreview: headers['Authorization']?.substring(0, 30) + '...'
+      })
 
       let response
       try {
@@ -504,6 +532,24 @@ const ProfileEditPage = () => {
         navigate('/profile', { replace: true })
         return
       } else {
+        // Обработка 401 - токен невалидный или отсутствует
+        if (response.status === 401) {
+          const errorText = await response.text()
+          let errorMessage = 'Ошибка авторизации'
+          try {
+            const errorData = JSON.parse(errorText)
+            errorMessage = errorData.detail || 'Токен авторизации недействителен'
+          } catch {
+            errorMessage = errorText || 'Токен авторизации недействителен'
+          }
+          
+          // Очищаем токен и предлагаем переавторизоваться
+          clearAuthToken()
+          alert(`${errorMessage}\n\nПожалуйста, обновите страницу (F5) для повторной авторизации.`)
+          setLoading(false)
+          return
+        }
+        
         const errorText = await response.text()
         
         let errorMessage = 'Ошибка при сохранении профиля'

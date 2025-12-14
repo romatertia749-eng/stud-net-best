@@ -103,9 +103,13 @@ export const WebAppProvider = ({ children }) => {
             })
             .then((data) => {
               const token = data.token || data.jwt
+              console.log('🔐 Получен токен от сервера:', token ? 'Есть' : 'ОТСУТСТВУЕТ')
               if (token) {
                 setAuthToken(token)
                 setJwt(token)
+                console.log('✅ Токен сохранён в localStorage')
+              } else {
+                console.error('❌ Токен не получен от сервера')
               }
             })
             .catch((authError) => {
