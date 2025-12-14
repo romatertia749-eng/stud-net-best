@@ -70,18 +70,26 @@ def create_jwt_token(user_id: int) -> str:
     logger = logging.getLogger(__name__)
     
     expire = datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+    
+    # Убеждаемся, что sub - строка (JWT требует строку)
+    user_id_str = str(user_id)
     payload = {
-        "sub": str(user_id),  # JWT требует, чтобы sub был строкой
+        "sub": user_id_str,
         "exp": expire
     }
+    
+    # Проверяем тип sub перед кодированием
+    if not isinstance(payload["sub"], str):
+        logger.error(f"❌ ОШИБКА: sub не является строкой! Тип: {type(payload['sub'])}, значение: {payload['sub']}")
+        payload["sub"] = str(payload["sub"])
     
     # Логируем информацию о ключе (только первые и последние символы для безопасности)
     secret_key = settings.JWT_SECRET_KEY
     secret_preview = f"{secret_key[:8]}...{secret_key[-8:]}" if len(secret_key) > 16 else "***"
-    logger.info(f"🔑 Создание токена для user_id={user_id}, используемый ключ: {secret_preview}, длина: {len(secret_key)}")
+    logger.info(f"🔑 Создание токена для user_id={user_id} (sub={user_id_str}, тип={type(user_id_str).__name__}), используемый ключ: {secret_preview}, длина: {len(secret_key)}")
     
     token = jwt.encode(payload, secret_key, algorithm=settings.JWT_ALGORITHM)
-    logger.info(f"✅ Токен создан успешно (длина: {len(token)})")
+    logger.info(f"✅ Токен создан успешно (длина: {len(token)}, payload sub тип: {type(payload.get('sub')).__name__})")
     return token
 
 def decode_jwt_token(token: str) -> Optional[int]:
@@ -94,20 +102,48 @@ def decode_jwt_token(token: str) -> Optional[int]:
         secret_preview = f"{secret_key[:8]}...{secret_key[-8:]}" if len(secret_key) > 16 else "***"
         logger.info(f"🔐 Декодирование токена (длина токена: {len(token)}, используемый ключ: {secret_preview}, длина ключа: {len(secret_key)})")
         
-        payload = jwt.decode(token, secret_key, algorithms=[settings.JWT_ALGORITHM])
-        # sub теперь строка, нужно преобразовать в int
-        user_id_str = payload.get("sub")
+        # Декодируем токен
+        # Используем options для отключения проверки типа sub (библиотека может быть строгой)
+        payload = jwt.decode(
+            token, 
+            secret_key, 
+            algorithms=[settings.JWT_ALGORITHM],
+            options={
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_aud": False,
+                "verify_iss": False,
+                "verify_sub": False  # Отключаем проверку sub, так как мы сами обрабатываем его
+            }
+        )
+        
+        logger.info(f"📋 Декодированный payload: sub={payload.get('sub')}, тип sub: {type(payload.get('sub')).__name__}")
+        
+        # sub может быть строкой или числом (для совместимости со старыми токенами)
+        user_id_value = payload.get("sub")
+        if user_id_value is None:
+            logger.warning("❌ Токен не содержит 'sub'")
+            return None
+        
+        # Преобразуем в int (может быть строкой или числом)
+        try:
+            if isinstance(user_id_value, str):
+                user_id: int = int(user_id_value)
+            elif isinstance(user_id_value, int):
+                user_id = user_id_value
+            else:
+                logger.warning(f"❌ Неожиданный тип sub: {type(user_id_value)}")
+                return None
+                
+            logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
+            return user_id
+        except (ValueError, TypeError) as e:
+            logger.warning(f"❌ Не удалось преобразовать 'sub' в int: {user_id_value} (тип: {type(user_id_value).__name__}), ошибка: {e}")
+            return None
         if user_id_str is None:
             logger.warning("❌ Токен не содержит 'sub'")
             return None
         
-        try:
-            user_id: int = int(user_id_str)
-            logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
-            return user_id
-        except (ValueError, TypeError):
-            logger.warning(f"❌ Не удалось преобразовать 'sub' в int: {user_id_str}")
-            return None
     except JWTError as e:
         logger.warning(f"❌ Ошибка декодирования токена: {type(e).__name__}: {str(e)}")
         # Дополнительная информация для отладки
