@@ -4,7 +4,7 @@ import { useWebApp } from '../contexts/WebAppContext'
 import { Card, Button, Autocomplete, MultiSelect } from '../components'
 import { russianCities, universities, interests, goals } from '../data/formData'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
-import { getAuthToken, clearAuthToken } from '../utils/api'
+import { getAuthToken, clearAuthToken, setAuthToken } from '../utils/api'
 
 /**
  * ProfilePage - страница профиля пользователя
@@ -411,6 +411,18 @@ const ProfilePage = () => {
       return
     }
     
+    // Проверяем, что авторизация завершена
+    const token = jwt || getAuthToken()
+    if (!token) {
+      const errorMsg = 'Ошибка: токен авторизации не найден.\n\n' +
+        'Возможные причины:\n' +
+        '1. Авторизация не прошла успешно\n' +
+        '2. Токен был удалён из localStorage\n\n' +
+        'Попробуйте обновить страницу (F5) или перезапустить приложение в Telegram.'
+      alert(errorMsg)
+      return
+    }
+    
     setLoading(true)
     
     const apiUrl = API_ENDPOINTS.PROFILES
@@ -445,7 +457,16 @@ const ProfilePage = () => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000)
 
+      // Получаем токен для авторизации (сначала из контекста, потом из localStorage)
       const token = jwt || getAuthToken()
+      console.log('🔑 Проверка токена при сохранении:', {
+        hasJwtFromContext: !!jwt,
+        hasTokenFromStorage: !!getAuthToken(),
+        hasToken: !!token,
+        tokenLength: token?.length || 0,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'НЕТ ТОКЕНА'
+      })
+      
       if (!token) {
         const errorMsg = 'Ошибка: токен авторизации не найден.\n\n' +
           'Возможные причины:\n' +
@@ -455,6 +476,12 @@ const ProfilePage = () => {
         alert(errorMsg)
         setLoading(false)
         return
+      }
+      
+      // Синхронизируем токен из контекста в localStorage, если он там отсутствует
+      if (jwt && !getAuthToken()) {
+        setAuthToken(jwt)
+        console.log('🔄 Токен из контекста синхронизирован в localStorage')
       }
 
       const headers = {
