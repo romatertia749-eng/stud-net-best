@@ -166,8 +166,14 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
         return []
     
     # Оптимизированный запрос с JOIN и NOT EXISTS вместо множественных запросов
-    from sqlalchemy import not_
+    from sqlalchemy import not_, exists
     
+    # Получаем ID профилей, на которые текущий пользователь уже ответил
+    responded_profile_ids = db.query(Swipe.target_profile_id).filter(
+        Swipe.user_id == user_id
+    ).subquery()
+    
+    # Получаем профили тех, кто лайкнул текущего пользователя, но текущий пользователь ещё не ответил
     liker_profiles = db.query(Profile).join(
         Swipe,
         and_(
@@ -178,12 +184,7 @@ def get_incoming_likes(db: Session, user_id: int) -> List[Profile]:
     ).filter(
         Profile.is_active == True,
         Profile.deleted_at == None,
-        not_(
-            db.query(Swipe).filter(
-                Swipe.user_id == user_id,
-                Swipe.target_profile_id == Profile.id
-            ).exists()
-        )
+        ~Profile.id.in_(responded_profile_ids)
     ).order_by(Swipe.created_at.desc()).all()
     
     return liker_profiles
