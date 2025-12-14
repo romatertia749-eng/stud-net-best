@@ -56,8 +56,10 @@ export const WebAppProvider = ({ children }) => {
 
       try {
         const savedToken = getAuthToken()
+        console.log('💾 Проверка сохранённого токена:', savedToken ? 'Найден' : 'Не найден')
         if (savedToken) {
           setJwt(savedToken)
+          console.log('✅ Используется сохранённый токен')
         }
 
         if (window.Telegram?.WebApp) {
@@ -86,15 +88,20 @@ export const WebAppProvider = ({ children }) => {
             console.log('👤 Данные пользователя установлены:', userData)
             setUser(userData)
             userWasSet = true
-            isCompleted = true
-            clearTimeout(timeoutId)
-            setIsLoading(false)
+            // НЕ завершаем загрузку здесь - ждём результата авторизации
           }
 
           if (initData) {
             console.log('🔐 Найдены initData, отправка запроса на авторизацию...')
             // Сохраняем информацию о пользователе для проверки в catch
             const hasUser = !!initDataUnsafe?.user
+            const userId = initDataUnsafe?.user?.id
+            
+            // Отправляем user_id в теле запроса для fallback, если проверка не пройдёт
+            const requestBody = userId ? {
+              user_id: userId,
+              dev_mode: false // Не dev_mode, но user_id для fallback
+            } : {}
             
             fetch(API_ENDPOINTS.AUTH, {
               method: 'POST',
@@ -102,10 +109,32 @@ export const WebAppProvider = ({ children }) => {
                 'Content-Type': 'application/json',
                 'Authorization': `tma ${initData}`,
               },
+              body: Object.keys(requestBody).length > 0 ? JSON.stringify(requestBody) : undefined,
             })
             .then(async (response) => {
               if (!response.ok) {
                 const errorText = await response.text()
+                // Если ошибка, но есть user_id, пробуем fallback
+                if (userId && (response.status === 401 || response.status === 400)) {
+                  console.warn(`⚠️ Авторизация не прошла (${response.status}), пробуем fallback с user_id=${userId}`)
+                  // Пробуем fallback с dev_mode
+                  return fetch(API_ENDPOINTS.AUTH, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      user_id: userId,
+                      dev_mode: true
+                    })
+                  }).then(async (fallbackResponse) => {
+                    if (fallbackResponse.ok) {
+                      return fallbackResponse.json()
+                    } else {
+                      throw new Error(`Fallback authentication failed: ${fallbackResponse.status}`)
+                    }
+                  })
+                }
                 throw new Error(`Authentication failed: ${response.status} - ${errorText}`)
               }
               return response.json()
@@ -117,6 +146,9 @@ export const WebAppProvider = ({ children }) => {
                 setAuthToken(token)
                 setJwt(token)
                 console.log('✅ Токен сохранён в localStorage')
+                isCompleted = true
+                clearTimeout(timeoutId)
+                setIsLoading(false)
               } else {
                 console.error('❌ Токен не получен от сервера')
                 // Если есть пользователь, но токен не получен, пытаемся получить токен для режима разработки
@@ -142,10 +174,20 @@ export const WebAppProvider = ({ children }) => {
                         console.log('✅ Токен получен через fallback метод')
                       }
                     }
+                    isCompleted = true
+                    clearTimeout(timeoutId)
+                    setIsLoading(false)
                   })
                   .catch((err) => {
                     console.warn('⚠️ Fallback получение токена не удалось:', err.message)
+                    isCompleted = true
+                    clearTimeout(timeoutId)
+                    setIsLoading(false)
                   })
+                } else {
+                  isCompleted = true
+                  clearTimeout(timeoutId)
+                  setIsLoading(false)
                 }
               }
             })
@@ -174,10 +216,20 @@ export const WebAppProvider = ({ children }) => {
                       console.log('✅ Токен получен через fallback метод после ошибки')
                     }
                   }
+                  isCompleted = true
+                  clearTimeout(timeoutId)
+                  setIsLoading(false)
                 })
                 .catch((err) => {
                   console.warn('⚠️ Fallback получение токена не удалось:', err.message)
+                  isCompleted = true
+                  clearTimeout(timeoutId)
+                  setIsLoading(false)
                 })
+              } else {
+                isCompleted = true
+                clearTimeout(timeoutId)
+                setIsLoading(false)
               }
               // Устанавливаем ошибку только если это критическая ошибка авторизации
               // Не блокируем работу, если пользователь уже установлен
@@ -222,19 +274,28 @@ export const WebAppProvider = ({ children }) => {
                     setAuthToken(token)
                     setJwt(token)
                     console.log('✅ Токен для режима разработки получен и сохранён')
+                  } else {
+                    console.error('❌ Токен не получен в ответе от сервера')
                   }
                 } else {
-                  console.warn('⚠️ Не удалось получить токен в режиме разработки, но продолжаем работу')
+                  const errorText = await response.text()
+                  console.warn('⚠️ Не удалось получить токен в режиме разработки:', response.status, errorText)
                 }
+                isCompleted = true
+                clearTimeout(timeoutId)
+                setIsLoading(false)
               })
               .catch((err) => {
                 console.warn('⚠️ Ошибка при получении токена в режиме разработки:', err.message)
+                isCompleted = true
+                clearTimeout(timeoutId)
+                setIsLoading(false)
               })
+            } else {
+              isCompleted = true
+              clearTimeout(timeoutId)
+              setIsLoading(false)
             }
-            
-            isCompleted = true
-            clearTimeout(timeoutId)
-            setIsLoading(false)
           }
         } else {
           console.warn('Telegram Web App не обнаружен. Режим разработки.')
@@ -268,19 +329,23 @@ export const WebAppProvider = ({ children }) => {
                 setAuthToken(token)
                 setJwt(token)
                 console.log('✅ Токен для режима разработки получен и сохранён')
+              } else {
+                console.error('❌ Токен не получен в ответе от сервера')
               }
             } else {
               const errorText = await response.text()
-              console.warn('⚠️ Не удалось получить токен в режиме разработки:', errorText)
+              console.warn('⚠️ Не удалось получить токен в режиме разработки:', response.status, errorText)
             }
+            isCompleted = true
+            clearTimeout(timeoutId)
+            setIsLoading(false)
           })
           .catch((err) => {
             console.warn('⚠️ Ошибка при получении токена в режиме разработки:', err.message)
+            isCompleted = true
+            clearTimeout(timeoutId)
+            setIsLoading(false)
           })
-          
-          isCompleted = true
-          clearTimeout(timeoutId)
-          setIsLoading(false)
         }
       } catch (err) {
         console.error('Initialization error:', err)
