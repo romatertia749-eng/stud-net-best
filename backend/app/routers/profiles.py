@@ -1,7 +1,7 @@
 """
 Роутер для работы с профилями
 """
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -160,6 +160,7 @@ async def create_or_update_profile_endpoint(
 
 @router.get("/incoming-likes")
 async def get_incoming_likes_endpoint(
+    request: Request,
     db: Session = Depends(get_db),
     current_user_id: int = Depends(get_current_user_id_required)
 ):
@@ -169,9 +170,13 @@ async def get_incoming_likes_endpoint(
     Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
     """
     try:
+        logger.info(f"📥 Запрос входящих лайков для user_id={current_user_id}")
         profiles = get_incoming_likes(db, current_user_id)
         result = [_profile_to_dict(p) for p in profiles]
+        logger.info(f"✅ Найдено входящих лайков: {len(result)}")
         return JSONResponse(content=result)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
+        logger.error(f"❌ Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
         raise HTTPException(status_code=500, detail="Internal server error")

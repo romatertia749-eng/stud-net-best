@@ -5,7 +5,7 @@ import { russianCities, universities, interests } from '../data/formData'
 import { useMatches } from '../contexts/MatchContext'
 import { useWebApp } from '../contexts/WebAppContext'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
-import { fetchWithAuth } from '../utils/api'
+import { fetchWithAuth, getAuthToken } from '../utils/api'
 
 /**
  * ProfilesPage - главная страница для просмотра и свайпа анкет пользователей
@@ -167,7 +167,10 @@ const ProfilesPage = () => {
    * Это вкладка "Входящие коннекты"
    */
   const fetchIncomingLikes = async () => {
-    if (!userInfo?.id) return
+    if (!userInfo?.id) {
+      console.warn('⚠️ fetchIncomingLikes: userInfo.id отсутствует')
+      return
+    }
     
     setLoadingIncoming(true)
     setIncomingError(null)
@@ -179,16 +182,31 @@ const ProfilesPage = () => {
       const timeoutId = setTimeout(() => controller.abort(), 4000)
       
       const url = API_ENDPOINTS.INCOMING_LIKES
+      console.log('📤 Запрос входящих лайков:', url)
+      
+      const token = getAuthToken()
+      console.log('🔑 Токен для запроса:', token ? `${token.substring(0, 20)}...` : 'НЕТ ТОКЕНА')
+      
       const response = await fetchWithAuth(url, {
         signal: controller.signal
       })
       
       clearTimeout(timeoutId)
+      
+      console.log('📥 Ответ от сервера:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      })
         
       if (response.ok) {
         const data = await response.json()
+        console.log('📋 Данные от сервера:', data)
+        
         // Обрабатываем разные форматы ответа от сервера
         const profiles = Array.isArray(data.content) ? data.content : (Array.isArray(data) ? data : [])
+        console.log('👥 Обработанные профили:', profiles.length)
         
         // Обрабатываем каждый профиль: парсим JSON строки в массивы
         const processedProfiles = profiles.map(profile => {
@@ -218,6 +236,7 @@ const ProfilesPage = () => {
           }
         })
         
+        console.log('✅ Успешно загружено входящих лайков:', processedProfiles.length)
         setIncomingLikes(processedProfiles)
         setCurrentIndex(0)
         
@@ -226,21 +245,33 @@ const ProfilesPage = () => {
         if (!hasSeenIncomingTip && processedProfiles.length > 0) {
           setShowIncomingTip(true)
         }
+      } else if (response.status === 401) {
+        console.error('❌ Ошибка авторизации (401)')
+        const errorText = await response.text()
+        console.error('Текст ошибки:', errorText)
+        setIncomingError('load_error')
+        setIncomingLikes([])
+        setCurrentIndex(0)
       } else if (response.status === 404) {
-        // Эндпоинт не реализован на бэкенде
+        console.warn('⚠️ Эндпоинт не найден (404)')
         setIncomingLikes([])
         setIncomingError('not_implemented')
         setCurrentIndex(0)
       } else {
-        // Ошибка загрузки
+        console.error('❌ Ошибка загрузки:', response.status, response.statusText)
+        const errorText = await response.text()
+        console.error('Текст ошибки:', errorText)
         setIncomingError('load_error')
         setIncomingLikes([])
         setCurrentIndex(0)
       }
     } catch (error) {
+      console.error('❌ Исключение при загрузке входящих лайков:', error)
       if (error.name === 'AbortError') {
+        console.error('⏱️ Таймаут запроса')
         setIncomingError('timeout')
       } else {
+        console.error('🌐 Сетевая ошибка:', error.message)
         setIncomingError('network_error')
       }
       setIncomingLikes([])

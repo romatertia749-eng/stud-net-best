@@ -36,9 +36,11 @@ class FilteredStderr:
 # Применяем фильтр к stderr
 sys.stderr = FilteredStderr(sys.stderr)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import logging
 
 from config import settings
@@ -58,18 +60,42 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Middleware для логирования заголовков (только для POST /api/profiles)
+# Обработчик ошибок валидации (422)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Обработчик ошибок валидации с детальным логированием"""
+    logger = logging.getLogger(__name__)
+    logger.error(f"❌ Validation error for {request.method} {request.url}")
+    logger.error(f"   Errors: {exc.errors()}")
+    logger.error(f"   Body: {await request.body() if hasattr(request, 'body') else 'N/A'}")
+    logger.error(f"   Headers: {dict(request.headers)}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors(), "body": str(exc.body) if hasattr(exc, 'body') else None}
+    )
+
+# Middleware для логирования заголовков
 @app.middleware("http")
-async def log_headers_middleware(request, call_next):
-    if request.method == "POST" and "/api/profiles" in str(request.url):
+async def log_headers_middleware(request: Request, call_next):
+    url_str = str(request.url)
+    
+    # Логируем POST /api/profiles
+    if request.method == "POST" and "/api/profiles" in url_str:
         print(f"📥 [MIDDLEWARE] POST /api/profiles - Заголовки:")
         for header_name, header_value in request.headers.items():
             if header_name.lower() == "authorization":
-                # Показываем только первые 30 символов для безопасности
                 preview = header_value[:30] + "..." if len(header_value) > 30 else header_value
                 print(f"   {header_name}: {preview}")
             else:
                 print(f"   {header_name}: {header_value}")
+    
+    # Логируем GET /api/profiles/incoming-likes
+    if request.method == "GET" and "/api/profiles/incoming-likes" in url_str:
+        logger = logging.getLogger(__name__)
+        logger.info(f"📥 [MIDDLEWARE] GET /api/profiles/incoming-likes")
+        logger.info(f"   URL: {url_str}")
+        logger.info(f"   Query params: {dict(request.query_params)}")
+        logger.info(f"   Headers: {dict(request.headers)}")
     
     response = await call_next(request)
     return response
