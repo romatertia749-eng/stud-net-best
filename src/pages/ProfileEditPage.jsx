@@ -111,7 +111,7 @@ const ProfileEditPage = () => {
               setProfileData(cachedData.data)
               setFormData({
                 name: cachedData.data.name || '',
-                gender: cachedData.data.gender || '',
+                gender: cachedData.data.gender === 'Мужской' ? 'male' : cachedData.data.gender === 'Женский' ? 'female' : cachedData.data.gender || '',
                 age: cachedData.data.age?.toString() || '',
                 city: cachedData.data.city || '',
                 university: cachedData.data.university || '',
