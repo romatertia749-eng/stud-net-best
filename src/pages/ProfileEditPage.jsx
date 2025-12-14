@@ -447,11 +447,13 @@ const ProfileEditPage = () => {
 
       let response
       try {
+        // Для FormData не нужно указывать Content-Type - браузер сам установит
         response = await fetch(apiUrl, {
           method: 'POST',
           body: formDataToSend,
           signal: controller.signal,
           mode: 'cors',
+          credentials: 'include',
         })
         clearTimeout(timeoutId)
       } catch (fetchError) {
@@ -533,6 +535,8 @@ const ProfileEditPage = () => {
     } catch (error) {
       let errorMessage = 'Ошибка при сохранении профиля'
       
+      console.error('Ошибка при создании профиля:', error)
+      
       if (error.name === 'AbortError' || error.message.includes('превысил время ожидания')) {
         errorMessage = 'Запрос превысил время ожидания. Проверьте подключение к интернету и попробуйте снова.'
       } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
@@ -549,6 +553,13 @@ const ProfileEditPage = () => {
       } else if (error.message) {
         errorMessage = error.message
       }
+      
+      console.error('Детали ошибки:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        apiUrl
+      })
       
       alert(errorMessage)
     } finally {

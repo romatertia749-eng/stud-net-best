@@ -4,8 +4,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
+import json
 
 from app.database import Profile
 from app.dependencies import get_db
@@ -37,6 +38,25 @@ class ProfileResponse(BaseModel):
     photo_url: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    
+    @field_validator('interests', 'goals', mode='before')
+    @classmethod
+    def validate_list_fields(cls, v):
+        """Преобразует JSONB массивы в списки строк"""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            # Убеждаемся, что все элементы - строки
+            return [str(item) for item in v]
+        if isinstance(v, str):
+            # Если это JSON строка, пытаемся распарсить
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed]
+            except:
+                pass
+        return []
     
     class Config:
         from_attributes = True
@@ -98,7 +118,8 @@ async def create_or_update_profile_endpoint(
     
     Если профиль с таким user_id уже существует, он обновляется
     """
-    profile = create_or_update_profile(
+    try:
+        profile = create_or_update_profile(
         db=db,
         user_id=user_id,
         username=username,
@@ -114,7 +135,14 @@ async def create_or_update_profile_endpoint(
         bio=bio,
         photo=photo
     )
-    return profile
+        return profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка при создании/обновлении профиля: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении профиля: {str(e)}")
 
 @router.get("/incoming-likes", response_model=List[ProfileResponse])
 async def get_incoming_likes_endpoint(
