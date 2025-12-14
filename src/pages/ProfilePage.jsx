@@ -15,7 +15,7 @@ import { getAuthToken, clearAuthToken, setAuthToken } from '../utils/api'
  * - Кэширует данные профиля в localStorage
  */
 const ProfilePage = () => {
-  const { user, jwt } = useWebApp()
+  const { user, jwt, reauthenticate } = useWebApp()
   const navigate = useNavigate()
   
   // Состояние загрузки
@@ -458,14 +458,29 @@ const ProfilePage = () => {
       const timeoutId = setTimeout(() => controller.abort(), 30000)
 
       // Получаем токен для авторизации (сначала из контекста, потом из localStorage)
-      const token = jwt || getAuthToken()
+      let token = jwt || getAuthToken()
       console.log('🔑 Проверка токена при сохранении:', {
         hasJwtFromContext: !!jwt,
+        jwtLength: jwt?.length || 0,
         hasTokenFromStorage: !!getAuthToken(),
+        tokenFromStorageLength: getAuthToken()?.length || 0,
         hasToken: !!token,
         tokenLength: token?.length || 0,
         tokenPreview: token ? `${token.substring(0, 20)}...` : 'НЕТ ТОКЕНА'
       })
+      
+      // Синхронизируем токен из контекста в localStorage, если он там отсутствует
+      if (jwt && !getAuthToken()) {
+        setAuthToken(jwt)
+        console.log('🔄 Токен из контекста синхронизирован в localStorage')
+        token = jwt
+      }
+      
+      // Если токен всё ещё отсутствует, пробуем получить его из localStorage ещё раз
+      if (!token) {
+        token = getAuthToken()
+        console.log('🔄 Повторная попытка получить токен из localStorage:', token ? 'Найден' : 'Не найден')
+      }
       
       if (!token) {
         const errorMsg = 'Ошибка: токен авторизации не найден.\n\n' +
@@ -477,16 +492,16 @@ const ProfilePage = () => {
         setLoading(false)
         return
       }
-      
-      // Синхронизируем токен из контекста в localStorage, если он там отсутствует
-      if (jwt && !getAuthToken()) {
-        setAuthToken(jwt)
-        console.log('🔄 Токен из контекста синхронизирован в localStorage')
-      }
 
       const headers = {
         'Authorization': `Bearer ${token}`
       }
+      
+      console.log('📤 Отправка запроса с заголовками:', {
+        hasAuthorization: !!headers['Authorization'],
+        authorizationLength: headers['Authorization']?.length || 0,
+        authorizationPreview: headers['Authorization']?.substring(0, 50) + '...'
+      })
 
       let response
       try {
@@ -547,10 +562,65 @@ const ProfilePage = () => {
             errorMessage = errorText || 'Токен авторизации недействителен'
           }
           
-          clearAuthToken()
-          const cacheKey = `profile_${user.id}`
-          localStorage.removeItem(cacheKey)
-          alert(`${errorMessage}\n\nПожалуйста, обновите страницу (F5) для повторной авторизации.`)
+          // Пробуем автоматически переавторизоваться
+          alert('Токен авторизации истёк. Пытаемся получить новый токен...')
+          const newToken = await reauthenticate()
+          
+          if (newToken) {
+            // Повторяем запрос с новым токеном
+            const retryHeaders = {
+              'Authorization': `Bearer ${newToken}`
+            }
+            
+            const retryResponse = await fetch(apiUrl, {
+              method: 'POST',
+              headers: retryHeaders,
+              body: formDataToSend,
+              signal: controller.signal,
+              mode: 'cors',
+              credentials: 'include',
+            })
+            
+            if (retryResponse.ok) {
+              const data = await retryResponse.json()
+              setLoading(false)
+              
+              alert('Профиль успешно создан!')
+              
+              const updatedProfileData = {
+                name: formData.name,
+                gender: formData.gender === 'male' ? 'Мужской' : formData.gender === 'female' ? 'Женский' : 'Другой',
+                age: parseInt(formData.age),
+                city: formData.city,
+                university: formData.university,
+                interests: formData.interests,
+                goals: formData.goals,
+                bio: formData.bio,
+                photo_url: data.photo_url || null,
+              }
+              
+              const cacheKey = `profile_${user.id}`
+              localStorage.setItem(cacheKey, JSON.stringify({
+                data: updatedProfileData,
+                expires: Date.now() + 30 * 60 * 1000
+              }))
+              localStorage.setItem('last_user_id', user.id.toString())
+              localStorage.removeItem(`profiles_${user.id}`)
+              
+              setProfileData(updatedProfileData)
+              setIsEditing(true)
+              return
+            } else {
+              const retryErrorText = await retryResponse.text()
+              alert(`Ошибка после переавторизации (${retryResponse.status}): ${retryErrorText.substring(0, 200)}`)
+            }
+          } else {
+            clearAuthToken()
+            const cacheKey = `profile_${user.id}`
+            localStorage.removeItem(cacheKey)
+            alert(`${errorMessage}\n\nНе удалось автоматически переавторизоваться. Пожалуйста, обновите страницу (F5) или перезапустите приложение в Telegram.`)
+          }
+          
           setLoading(false)
           return
         }

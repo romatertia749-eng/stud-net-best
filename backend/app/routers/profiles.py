@@ -6,7 +6,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import json
+import logging
 from app.dependencies import get_db, get_current_user_id_required
+
+logger = logging.getLogger(__name__)
 from app.services.profile_service import (
     get_profile_by_user_id,
     get_profile_by_id,

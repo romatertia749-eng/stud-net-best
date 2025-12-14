@@ -145,7 +145,14 @@ export const WebAppProvider = ({ children }) => {
               if (token) {
                 setAuthToken(token)
                 setJwt(token)
-                console.log('✅ Токен сохранён в localStorage')
+                console.log('✅ Токен сохранён в localStorage и контексте')
+                // Дополнительная проверка, что токен действительно сохранился
+                const savedToken = getAuthToken()
+                if (savedToken !== token) {
+                  console.error('❌ ОШИБКА: Токен не сохранился в localStorage!')
+                  // Пробуем ещё раз
+                  setAuthToken(token)
+                }
                 isCompleted = true
                 clearTimeout(timeoutId)
                 setIsLoading(false)
@@ -398,11 +405,75 @@ export const WebAppProvider = ({ children }) => {
     initAuth()
   }, [])
 
+  /**
+   * Функция для переавторизации пользователя
+   * Используется при ошибке 401 для получения нового токена
+   */
+  const reauthenticate = async () => {
+    try {
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp
+        const initData = tg.initData
+        const initDataUnsafe = tg.initDataUnsafe
+        
+        if (initData && initDataUnsafe?.user?.id) {
+          const response = await fetch(API_ENDPOINTS.AUTH, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `tma ${initData}`,
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const token = data.token || data.jwt
+            if (token) {
+              setAuthToken(token)
+              setJwt(token)
+              console.log('✅ Переавторизация успешна, новый токен получен')
+              return token
+            }
+          }
+        }
+        
+        // Fallback: пробуем dev_mode
+        if (initDataUnsafe?.user?.id) {
+          const response = await fetch(API_ENDPOINTS.AUTH, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: initDataUnsafe.user.id,
+              dev_mode: true
+            })
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const token = data.token || data.jwt
+            if (token) {
+              setAuthToken(token)
+              setJwt(token)
+              console.log('✅ Переавторизация через dev_mode успешна')
+              return token
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при переавторизации:', error)
+    }
+    return null
+  }
+
   const value = {
     user,
     jwt,
     isLoading,
     error,
+    reauthenticate,
   }
 
   return (

@@ -75,9 +75,18 @@ def create_jwt_token(user_id: int) -> str:
 
 def decode_jwt_token(token: str) -> Optional[int]:
     """Декодирование JWT токена и получение user_id"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"🔐 Декодирование токена (длина: {len(token)})")
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         user_id: int = payload.get("sub")
+        logger.info(f"✅ Токен успешно декодирован, user_id={user_id}")
         return user_id
-    except JWTError:
+    except JWTError as e:
+        logger.warning(f"❌ Ошибка декодирования токена: {type(e).__name__}: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Неожиданная ошибка при декодировании токена: {type(e).__name__}: {str(e)}")
         return None
