@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, Autocomplete, EffectOverlay } from '../components'
 import { russianCities, universities, interests } from '../data/formData'
@@ -6,6 +6,8 @@ import { useMatches } from '../contexts/MatchContext'
 import { useWebApp } from '../contexts/WebAppContext'
 import { API_ENDPOINTS, getPhotoUrl } from '../config/api'
 import { fetchWithAuth, getAuthToken } from '../utils/api'
+import { processProfiles, processProfile } from '../utils/profileUtils'
+import { useDebounce } from '../utils/debounce'
 
 /**
  * ProfilesPage - главная страница для просмотра и свайпа анкет пользователей
@@ -27,11 +29,34 @@ const ProfilesPage = () => {
   const [currentIndex, setCurrentIndex] = useState(0) // Индекс текущей карточки в массиве
   const [swipedProfiles, setSwipedProfiles] = useState([]) // ID профилей, которые уже свайпнули
   
-  // Состояние для фильтров
+  // Состояние для фильтров (внутренние значения для UI)
   const [selectedCity, setSelectedCity] = useState('')
   const [selectedUniversity, setSelectedUniversity] = useState('')
   const [selectedInterests, setSelectedInterests] = useState([])
   const [showFilters, setShowFilters] = useState(false) // Показывать/скрывать панель фильтров
+  
+  // Debounced значения фильтров для запросов (чтобы не делать запрос при каждом изменении)
+  const [debouncedCity, setDebouncedCity] = useState('')
+  const [debouncedUniversity, setDebouncedUniversity] = useState('')
+  const [debouncedInterests, setDebouncedInterests] = useState([])
+  
+  // Debounce функции для фильтров (300ms задержка)
+  const debouncedSetCity = useDebounce((value) => setDebouncedCity(value), 300)
+  const debouncedSetUniversity = useDebounce((value) => setDebouncedUniversity(value), 300)
+  const debouncedSetInterests = useDebounce((value) => setDebouncedInterests(value), 300)
+  
+  // Обновляем debounced значения при изменении фильтров
+  useEffect(() => {
+    debouncedSetCity(selectedCity)
+  }, [selectedCity, debouncedSetCity])
+  
+  useEffect(() => {
+    debouncedSetUniversity(selectedUniversity)
+  }, [selectedUniversity, debouncedSetUniversity])
+  
+  useEffect(() => {
+    debouncedSetInterests(selectedInterests)
+  }, [selectedInterests, debouncedSetInterests])
   
   // Состояние для свайпа (анимация и позиция карточки)
   const [swipeOffset, setSwipeOffset] = useState(0) // Смещение карточки при свайпе (в пикселях)
@@ -81,36 +106,13 @@ const ProfilesPage = () => {
           const cachedData = JSON.parse(cached)
           // Проверяем, не истёк ли кэш (данные актуальны 10 минут)
           if (cachedData.expires > Date.now() && Array.isArray(cachedData.profiles)) {
-            // Обрабатываем профили: парсим JSON строки в массивы для interests и goals
-            const processedProfiles = cachedData.profiles.map(profile => {
-              // Парсим interests (может быть массивом или JSON строкой)
-              let interestsArray = []
-              if (profile.interests) {
-                if (Array.isArray(profile.interests)) {
-                  interestsArray = profile.interests
-                } else if (typeof profile.interests === 'string') {
-                  try { interestsArray = JSON.parse(profile.interests) } catch (e) { interestsArray = [] }
-                }
-              }
-              
-              // Парсим goals (может быть массивом или JSON строкой)
-              let goalsArray = []
-              if (profile.goals) {
-                if (Array.isArray(profile.goals)) {
-                  goalsArray = profile.goals
-                } else if (typeof profile.goals === 'string') {
-                  try { goalsArray = JSON.parse(profile.goals) } catch (e) { goalsArray = [] }
-                }
-              }
-              
-              // Формируем объект профиля с правильными типами данных
-              return {
-                ...profile,
-                interests: interestsArray,
-                goals: goalsArray,
-                photos: profile.photo_url ? [getPhotoUrl(profile.photo_url)] : []
-              }
-            })
+            // #region agent log
+            const perfStart = performance.now()
+            // #endregion
+            const processedProfiles = processProfiles(cachedData.profiles)
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:85',message:'Cache processing time',data:{time:performance.now()-perfStart,count:processedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             setAllProfiles(processedProfiles)
             setCurrentIndex(0)
             setSwipedProfiles([])
@@ -208,33 +210,13 @@ const ProfilesPage = () => {
         const profiles = Array.isArray(data.content) ? data.content : (Array.isArray(data) ? data : [])
         console.log('👥 Обработанные профили:', profiles.length)
         
-        // Обрабатываем каждый профиль: парсим JSON строки в массивы
-        const processedProfiles = profiles.map(profile => {
-          let interestsArray = []
-          if (profile.interests) {
-            if (Array.isArray(profile.interests)) {
-              interestsArray = profile.interests
-            } else if (typeof profile.interests === 'string') {
-              try { interestsArray = JSON.parse(profile.interests) } catch (e) { interestsArray = [] }
-            }
-          }
-          
-          let goalsArray = []
-          if (profile.goals) {
-            if (Array.isArray(profile.goals)) {
-              goalsArray = profile.goals
-            } else if (typeof profile.goals === 'string') {
-              try { goalsArray = JSON.parse(profile.goals) } catch (e) { goalsArray = [] }
-            }
-          }
-          
-          return {
-            ...profile,
-            interests: interestsArray,
-            goals: goalsArray,
-            photos: profile.photo_url ? [getPhotoUrl(profile.photo_url)] : []
-          }
-        })
+        // #region agent log
+        const perfStart = performance.now()
+        // #endregion
+        const processedProfiles = processProfiles(profiles)
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:212',message:'Incoming likes processing time',data:{time:performance.now()-perfStart,count:processedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         
         console.log('✅ Успешно загружено входящих лайков:', processedProfiles.length)
         setIncomingLikes(processedProfiles)
@@ -278,6 +260,9 @@ const ProfilesPage = () => {
       setCurrentIndex(0)
     } finally {
       setLoadingIncoming(false)
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:280',message:'Total fetchIncomingLikes time',data:{time:performance.now()-fetchStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
     }
   }
 
@@ -314,6 +299,10 @@ const ProfilesPage = () => {
     const fetchProfiles = async () => {
       if (!isMounted) return
       
+      // #region agent log
+      const fetchStart = performance.now()
+      // #endregion
+      
       // Проверяем кэш в localStorage
       const cacheKey = `profiles_${userInfo.id}`
       const cached = localStorage.getItem(cacheKey)
@@ -327,33 +316,13 @@ const ProfilesPage = () => {
             hasValidCache = true
             // Загружаем из кэша только если у нас ещё нет профилей
             if (allProfiles.length === 0) {
-              // Обрабатываем профили: парсим JSON строки
-              const processedProfiles = cachedData.profiles.map(profile => {
-                let interestsArray = []
-                if (profile.interests) {
-                  if (Array.isArray(profile.interests)) {
-                    interestsArray = profile.interests
-                  } else if (typeof profile.interests === 'string') {
-                    try { interestsArray = JSON.parse(profile.interests) } catch (e) { interestsArray = [] }
-                  }
-                }
-                
-                let goalsArray = []
-                if (profile.goals) {
-                  if (Array.isArray(profile.goals)) {
-                    goalsArray = profile.goals
-                  } else if (typeof profile.goals === 'string') {
-                    try { goalsArray = JSON.parse(profile.goals) } catch (e) { goalsArray = [] }
-                  }
-                }
-                
-                return {
-                  ...profile,
-                  interests: interestsArray,
-                  goals: goalsArray,
-                  photos: profile.photo_url ? [getPhotoUrl(profile.photo_url)] : []
-                }
-              })
+                // #region agent log
+              const perfStart = performance.now()
+              // #endregion
+              const processedProfiles = processProfiles(cachedData.profiles)
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:331',message:'Cache processing time (fetch)',data:{time:performance.now()-perfStart,count:processedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               setAllProfiles(processedProfiles)
               setCurrentIndex(0)
               setSwipedProfiles([])
@@ -436,49 +405,13 @@ const ProfilesPage = () => {
               }))
               localStorage.setItem('last_user_id', userInfo.id.toString())
               
-              const processedProfiles = profiles.map(profile => {
-                try {
-                  let interestsArray = []
-                  if (profile.interests) {
-                    if (Array.isArray(profile.interests)) {
-                      interestsArray = profile.interests
-                    } else if (typeof profile.interests === 'string') {
-                      try {
-                        interestsArray = JSON.parse(profile.interests)
-                      } catch (e) {
-                        interestsArray = []
-                      }
-                    }
-                  }
-                  
-                  let goalsArray = []
-                  if (profile.goals) {
-                    if (Array.isArray(profile.goals)) {
-                      goalsArray = profile.goals
-                    } else if (typeof profile.goals === 'string') {
-                      try {
-                        goalsArray = JSON.parse(profile.goals)
-                      } catch (e) {
-                        goalsArray = []
-                      }
-                    }
-                  }
-                  
-                  return {
-                    ...profile,
-                    interests: interestsArray,
-                    goals: goalsArray,
-                    photos: profile.photo_url ? [getPhotoUrl(profile.photo_url)] : []
-                  }
-                } catch (error) {
-                  return {
-                    ...profile,
-                    interests: [],
-                    goals: [],
-                    photos: profile.photo_url ? [getPhotoUrl(profile.photo_url)] : []
-                  }
-                }
-              })
+              // #region agent log
+              const perfStart = performance.now()
+              // #endregion
+              const processedProfiles = processProfiles(profiles)
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:439',message:'Server profiles processing time',data:{time:performance.now()-perfStart,count:processedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               setAllProfiles(processedProfiles)
               setCurrentIndex(0)
               setSwipedProfiles([])
@@ -508,6 +441,9 @@ const ProfilesPage = () => {
         if (isMounted && !hasValidCache) {
           setLoading(false)
         }
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProfilesPage.jsx:508',message:'Total fetchProfiles time',data:{time:performance.now()-fetchStart,hasCache:hasValidCache},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
       }
     }
     
@@ -558,7 +494,7 @@ const ProfilesPage = () => {
   useEffect(() => {
     setCurrentIndex(0)
     setSwipedProfiles([])
-  }, [selectedCity, selectedUniversity, selectedInterests])
+  }, [debouncedCity, debouncedUniversity, debouncedInterests])
   
   useEffect(() => {
     if (allProfiles.length > 0) {
@@ -577,13 +513,13 @@ const ProfilesPage = () => {
   }, [currentIndex, availableProfiles.length])
 
   // Сброс всех фильтров
-  const handleResetFilters = () => {
+  const handleResetFilters = useCallback(() => {
     setSelectedCity('')
     setSelectedUniversity('')
     setSelectedInterests([])
     setSwipedProfiles([]) // Сбрасываем список свайпнутых
     setCurrentIndex(0) // Возвращаемся к первой карточке
-  }
+  }, [])
 
   /**
    * Вызывается когда завершается анимация эффекта при свайпе
@@ -605,7 +541,7 @@ const ProfilesPage = () => {
    * Обработчик лайка (свайп вправо)
    * Отправляет запрос на сервер и показывает анимацию
    */
-  const handleLike = async () => {
+  const handleLike = useCallback(async () => {
     // Защита от двойного срабатывания
     if (isProcessingSwipe.current || isEffectActive || !currentProfile) return
     isProcessingSwipe.current = true
@@ -679,7 +615,7 @@ const ProfilesPage = () => {
       // В режиме разработки (без авторизации) просто добавляем в мэтчи
       addMatch(currentProfile)
     }
-  }
+  }, [isEffectActive, currentProfile, activeTab, incomingLikes.length, availableProfiles.length, userInfo?.id, addMatch])
 
   /**
    * Обработчик пропуска (свайп влево)
@@ -738,7 +674,7 @@ const ProfilesPage = () => {
         console.error('Error passing profile:', error)
       }
     }
-  }
+  }, [isEffectActive, currentProfile, activeTab, incomingLikes, availableProfiles, userInfo])
 
   /**
    * Обработчик начала касания (для свайпа на мобильных устройствах)
@@ -755,13 +691,13 @@ const ProfilesPage = () => {
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
     setSwipeOffset(0) // Сбрасываем смещение
-  }
+  }, [isEffectActive, isProcessingSwipe])
 
   /**
    * Обработчик движения пальца при свайпе
    * Обновляет позицию карточки в реальном времени
    */
-  const handleTouchMove = (e) => {
+  const handleTouchMove = useCallback((e) => {
     if (isEffectActive || !touchStartX.current || isProcessingSwipe.current) return
     
     // Отменяем предыдущий кадр анимации, если он был
@@ -789,7 +725,7 @@ const ProfilesPage = () => {
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
       e.preventDefault()
     }
-  }
+  }, [isEffectActive])
 
   /**
    * Обработчик окончания касания
@@ -835,7 +771,7 @@ const ProfilesPage = () => {
     touchStartY.current = 0
     touchEndX.current = 0
     touchEndY.current = 0
-  }
+  }, [isEffectActive, handlePass, handleLike])
 
   if (loading) {
     return (
@@ -1150,6 +1086,7 @@ const ProfilesPage = () => {
                             className="w-full h-64 md:h-80 object-cover rounded-xl"
                             loading="lazy"
                             decoding="async"
+                            fetchpriority="high"
                             onError={(e) => {
                               e.target.style.display = 'none'
                             }}

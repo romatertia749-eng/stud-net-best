@@ -44,6 +44,10 @@ export const WebAppProvider = ({ children }) => {
       setIsLoading(true)
       setError(null)
 
+      // #region agent log
+      const initStart = performance.now()
+      // #endregion
+
       let isCompleted = false
       let userWasSet = false // Отслеживаем, был ли установлен пользователь
       const timeoutId = setTimeout(() => {
@@ -60,6 +64,9 @@ export const WebAppProvider = ({ children }) => {
         if (savedToken) {
           setJwt(savedToken)
           console.log('✅ Используется сохранённый токен')
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:60',message:'Using cached token',data:{time:performance.now()-initStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
         }
 
         if (window.Telegram?.WebApp) {
@@ -103,6 +110,10 @@ export const WebAppProvider = ({ children }) => {
               dev_mode: false // Не dev_mode, но user_id для fallback
             } : {}
             
+            // #region agent log
+            const authStart = performance.now()
+            // #endregion
+            
             fetch(API_ENDPOINTS.AUTH, {
               method: 'POST',
               headers: {
@@ -112,6 +123,9 @@ export const WebAppProvider = ({ children }) => {
               body: Object.keys(requestBody).length > 0 ? JSON.stringify(requestBody) : undefined,
             })
             .then(async (response) => {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:106',message:'Auth request time',data:{time:performance.now()-authStart,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+              // #endregion
               if (!response.ok) {
                 const errorText = await response.text()
                 // Если ошибка, но есть user_id, пробуем fallback
@@ -156,11 +170,17 @@ export const WebAppProvider = ({ children }) => {
                 isCompleted = true
                 clearTimeout(timeoutId)
                 setIsLoading(false)
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:156',message:'Auth completed with token',data:{time:performance.now()-initStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
               } else {
                 console.error('❌ Токен не получен от сервера')
                 // Если есть пользователь, но токен не получен, пытаемся получить токен для режима разработки
                 if (hasUser && initDataUnsafe?.user?.id) {
                   console.log('🔄 Повторная попытка получить токен для user_id:', initDataUnsafe.user.id)
+                  // #region agent log
+                  const fallbackStart = performance.now()
+                  // #endregion
                   fetch(API_ENDPOINTS.AUTH, {
                     method: 'POST',
                     headers: {
@@ -172,6 +192,9 @@ export const WebAppProvider = ({ children }) => {
                     })
                   })
                   .then(async (response) => {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:164',message:'Fallback auth request time',data:{time:performance.now()-fallbackStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                    // #endregion
                     if (response.ok) {
                       const data = await response.json()
                       const token = data.token || data.jwt
@@ -184,17 +207,26 @@ export const WebAppProvider = ({ children }) => {
                     isCompleted = true
                     clearTimeout(timeoutId)
                     setIsLoading(false)
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:186',message:'Auth completed with fallback',data:{time:performance.now()-initStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                    // #endregion
                   })
                   .catch((err) => {
                     console.warn('⚠️ Fallback получение токена не удалось:', err.message)
                     isCompleted = true
                     clearTimeout(timeoutId)
                     setIsLoading(false)
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:193',message:'Auth failed',data:{time:performance.now()-initStart,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                    // #endregion
                   })
                 } else {
                   isCompleted = true
                   clearTimeout(timeoutId)
                   setIsLoading(false)
+                  // #region agent log
+                  fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WebAppContext.jsx:198',message:'Auth completed without user',data:{time:performance.now()-initStart},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                  // #endregion
                 }
               }
             })
