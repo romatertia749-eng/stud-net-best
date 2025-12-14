@@ -27,19 +27,35 @@ def get_current_user_id_required(authorization: Optional[str] = Header(None, ali
     import logging
     logger = logging.getLogger(__name__)
     
-    logger.info(f"🔐 Проверка авторизации: authorization={authorization[:50] if authorization else None}...")
+    # Используем и logger, и print для гарантии, что сообщение будет видно
+    auth_preview = authorization[:50] if authorization else None
+    print(f"🔐 [DEPENDENCIES] Проверка авторизации: authorization={auth_preview}...")
+    logger.info(f"🔐 Проверка авторизации: authorization={auth_preview}...")
     
-    if not authorization or not authorization.startswith("Bearer "):
-        logger.warning("❌ Authorization header отсутствует или не начинается с 'Bearer '")
+    if not authorization:
+        error_msg = "❌ Authorization header отсутствует"
+        print(error_msg)
+        logger.warning(error_msg)
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    
+    if not authorization.startswith("Bearer "):
+        error_msg = f"❌ Authorization header не начинается с 'Bearer ': {authorization[:30]}..."
+        print(error_msg)
+        logger.warning(error_msg)
         raise HTTPException(status_code=401, detail="Authorization header required")
     
     token = authorization.replace("Bearer ", "")
+    print(f"🔑 [DEPENDENCIES] Извлечён токен (длина: {len(token)}, первые 20 символов: {token[:20]}...)")
     logger.info(f"🔑 Извлечён токен (длина: {len(token)})")
     
     user_id = decode_jwt_token(token)
     if user_id is None:
-        logger.warning(f"❌ Токен невалидный или истёк: {token[:20]}...")
+        error_msg = f"❌ Токен невалидный или истёк: {token[:20]}..."
+        print(error_msg)
+        logger.warning(error_msg)
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     
-    logger.info(f"✅ Токен валиден, user_id={user_id}")
+    success_msg = f"✅ Токен валиден, user_id={user_id}"
+    print(success_msg)
+    logger.info(success_msg)
     return user_id

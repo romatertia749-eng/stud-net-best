@@ -411,12 +411,17 @@ export const WebAppProvider = ({ children }) => {
    */
   const reauthenticate = async () => {
     try {
-      if (window.Telegram?.WebApp) {
-        const tg = window.Telegram.WebApp
-        const initData = tg.initData
-        const initDataUnsafe = tg.initDataUnsafe
-        
-        if (initData && initDataUnsafe?.user?.id) {
+      if (!window.Telegram?.WebApp) {
+        return null
+      }
+      
+      const tg = window.Telegram.WebApp
+      const initData = tg.initData
+      const initDataUnsafe = tg.initDataUnsafe
+      
+      // Пробуем основной метод с initData
+      if (initData && initDataUnsafe?.user?.id) {
+        try {
           const response = await fetch(API_ENDPOINTS.AUTH, {
             method: 'POST',
             headers: {
@@ -428,17 +433,24 @@ export const WebAppProvider = ({ children }) => {
           if (response.ok) {
             const data = await response.json()
             const token = data.token || data.jwt
-            if (token) {
+            if (token && token.length > 10) {
               setAuthToken(token)
               setJwt(token)
-              console.log('✅ Переавторизация успешна, новый токен получен')
-              return token
+              // Проверяем, что токен действительно сохранился
+              const savedToken = getAuthToken()
+              if (savedToken === token) {
+                return token
+              }
             }
           }
+        } catch (error) {
+          // Пробуем fallback
         }
-        
-        // Fallback: пробуем dev_mode
-        if (initDataUnsafe?.user?.id) {
+      }
+      
+      // Fallback: пробуем dev_mode
+      if (initDataUnsafe?.user?.id) {
+        try {
           const response = await fetch(API_ENDPOINTS.AUTH, {
             method: 'POST',
             headers: {
@@ -453,17 +465,22 @@ export const WebAppProvider = ({ children }) => {
           if (response.ok) {
             const data = await response.json()
             const token = data.token || data.jwt
-            if (token) {
+            if (token && token.length > 10) {
               setAuthToken(token)
               setJwt(token)
-              console.log('✅ Переавторизация через dev_mode успешна')
-              return token
+              // Проверяем, что токен действительно сохранился
+              const savedToken = getAuthToken()
+              if (savedToken === token) {
+                return token
+              }
             }
           }
+        } catch (error) {
+          return null
         }
       }
     } catch (error) {
-      console.error('Ошибка при переавторизации:', error)
+      return null
     }
     return null
   }

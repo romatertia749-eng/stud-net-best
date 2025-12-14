@@ -48,9 +48,15 @@ class Settings(BaseSettings):
             # Проверяем переменную окружения напрямую
             jwt_secret = os.getenv('JWT_SECRET', '')
             if jwt_secret:
+                print(f"✅ JWT_SECRET найден в переменных окружения (длина: {len(jwt_secret)})")
                 self.JWT_SECRET_KEY = jwt_secret
             elif self.JWT_SECRET:
+                print(f"✅ JWT_SECRET найден в настройках (длина: {len(self.JWT_SECRET)})")
                 self.JWT_SECRET_KEY = self.JWT_SECRET
+            else:
+                print("⚠️  JWT_SECRET не найден в переменных окружения")
+        else:
+            print(f"✅ JWT_SECRET_KEY уже установлен (длина: {len(self.JWT_SECRET_KEY)})")
         return self
     
     # Telegram
@@ -96,7 +102,12 @@ if not isinstance(settings.CORS_ORIGINS, list):
 if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "your-secret-key-here-change-in-production":
     jwt_secret_env = os.getenv('JWT_SECRET', '')
     if jwt_secret_env:
+        print(f"✅ JWT_SECRET загружен из переменных окружения (длина: {len(jwt_secret_env)})")
         settings.JWT_SECRET_KEY = jwt_secret_env
+    else:
+        print("⚠️  JWT_SECRET не найден в переменных окружения при дополнительной проверке")
+else:
+    print(f"✅ JWT_SECRET_KEY уже установлен при дополнительной проверке (длина: {len(settings.JWT_SECRET_KEY)})")
 
 # Простая проверка при загрузке модуля
 def _check_config():

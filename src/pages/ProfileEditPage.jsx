@@ -585,20 +585,62 @@ const ProfileEditPage = () => {
           alert('Токен авторизации истёк. Пытаемся получить новый токен...')
           const newToken = await reauthenticate()
           
-          if (newToken) {
-            // Повторяем запрос с новым токеном
-            const retryHeaders = {
-              'Authorization': `Bearer ${newToken}`
+          // Проверяем, что токен действительно получен и сохранён
+          const verifiedToken = getAuthToken()
+          const tokenToUse = newToken || verifiedToken
+          
+          if (tokenToUse && tokenToUse.length > 10) {
+            // Создаём новый FormData для повторного запроса (старый нельзя переиспользовать)
+            const retryFormData = new FormData()
+            retryFormData.append('user_id', user.id.toString())
+            retryFormData.append('username', user.username || '')
+            retryFormData.append('first_name', user.first_name || '')
+            retryFormData.append('last_name', user.last_name || '')
+            retryFormData.append('name', formData.name)
+            retryFormData.append('gender', formData.gender)
+            retryFormData.append('age', formData.age.toString())
+            retryFormData.append('city', formData.city)
+            retryFormData.append('university', formData.university)
+            retryFormData.append('interests', JSON.stringify(formData.interests))
+            retryFormData.append('goals', JSON.stringify(formData.goals))
+            retryFormData.append('bio', formData.bio || '')
+            
+            if (formData.photos.length > 0 && formData.photos[0].file && !formData.photos[0].isExisting) {
+              retryFormData.append('photo', formData.photos[0].file)
             }
             
-            const retryResponse = await fetch(apiUrl, {
-              method: 'POST',
-              headers: retryHeaders,
-              body: formDataToSend,
-              signal: controller.signal,
-              mode: 'cors',
-              credentials: 'include',
-            })
+            // Повторяем запрос с новым токеном
+            const retryController = new AbortController()
+            const retryTimeoutId = setTimeout(() => retryController.abort(), 30000)
+            
+            const retryHeaders = {
+              'Authorization': `Bearer ${tokenToUse}`
+            }
+            
+            // Дополнительная проверка токена перед отправкой
+            if (!tokenToUse || tokenToUse.length < 10) {
+              alert('Ошибка: полученный токен невалиден. Попробуйте обновить страницу.')
+              setLoading(false)
+              return
+            }
+            
+            let retryResponse
+            try {
+              retryResponse = await fetch(apiUrl, {
+                method: 'POST',
+                headers: retryHeaders,
+                body: retryFormData,
+                signal: retryController.signal,
+                mode: 'cors',
+                credentials: 'include',
+              })
+              clearTimeout(retryTimeoutId)
+            } catch (retryError) {
+              clearTimeout(retryTimeoutId)
+              alert(`Ошибка при повторном запросе: ${retryError.message}`)
+              setLoading(false)
+              return
+            }
             
             if (retryResponse.ok) {
               const data = await retryResponse.json()
@@ -631,13 +673,25 @@ const ProfileEditPage = () => {
               return
             } else {
               const retryErrorText = await retryResponse.text()
-              alert(`Ошибка после переавторизации (${retryResponse.status}): ${retryErrorText.substring(0, 200)}`)
+              let retryErrorMessage = 'Ошибка после переавторизации'
+              try {
+                const retryErrorData = JSON.parse(retryErrorText)
+                retryErrorMessage = retryErrorData.detail || retryErrorText.substring(0, 200)
+              } catch {
+                retryErrorMessage = retryErrorText.substring(0, 200)
+              }
+              
+              if (retryResponse.status === 401) {
+                alert(`Ошибка: новый токен тоже недействителен (401).\n\nВозможные причины:\n1. Проблема с авторизацией на сервере\n2. Неправильный JWT_SECRET_KEY\n\nПопробуйте обновить страницу (F5) или перезапустить приложение.`)
+              } else {
+                alert(`Ошибка после переавторизации (${retryResponse.status}): ${retryErrorMessage}`)
+              }
             }
           } else {
             clearAuthToken()
             const cacheKey = `profile_${user.id}`
             localStorage.removeItem(cacheKey)
-            alert(`${errorMessage}\n\nНе удалось автоматически переавторизоваться. Пожалуйста, обновите страницу (F5) или перезапустите приложение в Telegram.`)
+            alert(`${errorMessage}\n\nНе удалось автоматически переавторизоваться.\n\nВозможные причины:\n1. Telegram Web App не доступен\n2. Проблема с сервером авторизации\n\nПожалуйста, обновите страницу (F5) или перезапустите приложение в Telegram.`)
           }
           
           setLoading(false)

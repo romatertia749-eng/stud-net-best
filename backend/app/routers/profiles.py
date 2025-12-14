@@ -130,6 +130,8 @@ async def create_or_update_profile_endpoint(
     
     Если профиль с таким user_id уже существует, он обновляется
     """
+    print(f"📝 [PROFILES] Создание/обновление профиля для user_id={current_user_id}")
+    logger.info(f"Создание/обновление профиля для user_id={current_user_id}")
     try:
         profile = create_or_update_profile(
             db=db,

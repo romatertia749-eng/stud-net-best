@@ -58,6 +58,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Middleware для логирования заголовков (только для POST /api/profiles)
+@app.middleware("http")
+async def log_headers_middleware(request, call_next):
+    if request.method == "POST" and "/api/profiles" in str(request.url):
+        print(f"📥 [MIDDLEWARE] POST /api/profiles - Заголовки:")
+        for header_name, header_value in request.headers.items():
+            if header_name.lower() == "authorization":
+                # Показываем только первые 30 символов для безопасности
+                preview = header_value[:30] + "..." if len(header_value) > 30 else header_value
+                print(f"   {header_name}: {preview}")
+            else:
+                print(f"   {header_name}: {header_value}")
+    
+    response = await call_next(request)
+    return response
+
 # Настройка CORS
 print(f"🔧 CORS настроен для origins: {settings.CORS_ORIGINS}")
 app.add_middleware(
