@@ -90,16 +90,19 @@ async def get_incoming_likes_endpoint(
     
     Возвращает профили тех, кто лайкнул пользователя, но пользователь ещё не ответил
     """
+    print(f"🎯 [INCOMING-LIKES] Функция вызвана, user_id={current_user_id}")
+    logger.info(f"📥 Запрос входящих лайков для user_id={current_user_id}")
     try:
-        logger.info(f"📥 Запрос входящих лайков для user_id={current_user_id}")
         profiles = get_incoming_likes(db, current_user_id)
         result = [_profile_to_dict(p) for p in profiles]
         logger.info(f"✅ Найдено входящих лайков: {len(result)}")
+        print(f"✅ [INCOMING-LIKES] Успешно, найдено: {len(result)}")
         return JSONResponse(content=result)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Error getting incoming likes: {e}", exc_info=True, extra={"user_id": current_user_id})
+        print(f"❌ [INCOMING-LIKES] Ошибка: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/user/{user_id}")

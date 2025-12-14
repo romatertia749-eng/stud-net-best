@@ -65,9 +65,18 @@ app = FastAPI(
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Обработчик ошибок валидации с детальным логированием"""
     logger = logging.getLogger(__name__)
+    print(f"❌ [VALIDATION ERROR] {request.method} {request.url}")
+    print(f"   Errors: {exc.errors()}")
     logger.error(f"❌ Validation error for {request.method} {request.url}")
     logger.error(f"   Errors: {exc.errors()}")
-    logger.error(f"   Body: {await request.body() if hasattr(request, 'body') else 'N/A'}")
+    try:
+        body = await request.body()
+        print(f"   Body: {body[:200] if body else 'N/A'}")
+        logger.error(f"   Body: {body[:200] if body else 'N/A'}")
+    except:
+        print(f"   Body: N/A (could not read)")
+        logger.error(f"   Body: N/A (could not read)")
+    print(f"   Headers: {dict(request.headers)}")
     logger.error(f"   Headers: {dict(request.headers)}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -92,12 +101,23 @@ async def log_headers_middleware(request: Request, call_next):
     # Логируем GET /api/profiles/incoming-likes
     if request.method == "GET" and "/api/profiles/incoming-likes" in url_str:
         logger = logging.getLogger(__name__)
+        print(f"📥 [MIDDLEWARE] GET /api/profiles/incoming-likes")
+        print(f"   URL: {url_str}")
+        print(f"   Query params: {dict(request.query_params)}")
+        print(f"   Headers: {dict(request.headers)}")
         logger.info(f"📥 [MIDDLEWARE] GET /api/profiles/incoming-likes")
         logger.info(f"   URL: {url_str}")
         logger.info(f"   Query params: {dict(request.query_params)}")
         logger.info(f"   Headers: {dict(request.headers)}")
     
     response = await call_next(request)
+    
+    # Логируем ответ для incoming-likes
+    if request.method == "GET" and "/api/profiles/incoming-likes" in url_str:
+        print(f"📤 [MIDDLEWARE] Response status: {response.status_code}")
+        logger = logging.getLogger(__name__)
+        logger.info(f"📤 [MIDDLEWARE] Response status: {response.status_code}")
+    
     return response
 
 # Настройка CORS
