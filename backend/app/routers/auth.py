@@ -1,9 +1,6 @@
-"""
-Роутер для авторизации
-"""
 from fastapi import APIRouter, Depends, HTTPException, Header
 from typing import Optional
-from app.services.auth import extract_user_id, generate_jwt_token, TelegramAuthError
+from app.auth import extract_user_id, generate_jwt_token, TelegramAuthError
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

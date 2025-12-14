@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.database import SessionLocal
-from app.services.auth import decode_jwt_token
+from app.auth import decode_jwt_token
 
 def get_db():
     """Получение сессии базы данных"""
