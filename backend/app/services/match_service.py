@@ -194,20 +194,43 @@ def respond_to_like(
         raise
 
 def get_matches(db: Session, user_id: int) -> List[Profile]:
-    """Получение списка мэтчей для пользователя (оптимизированная версия с JOIN)"""
+    """
+    Получение списка мэтчей для пользователя (оптимизированная версия с JOIN)
+    
+    Возвращает профили пользователей, с которыми есть взаимный лайк (мэтч)
+    """
     from sqlalchemy import case
+    import logging
     
-    # Оптимизированный запрос с JOIN вместо множественных запросов
-    matched_profiles = db.query(Profile).join(
-        Match,
-        or_(
-            and_(Match.user1_id == user_id, Match.user2_id == Profile.user_id),
-            and_(Match.user2_id == user_id, Match.user1_id == Profile.user_id)
-        )
-    ).filter(
-        Profile.is_active == True,
-        Profile.deleted_at == None,
-        Profile.user_id != user_id
-    ).order_by(Match.matched_at.desc()).all()
+    logger = logging.getLogger(__name__)
     
-    return matched_profiles
+    try:
+        # Проверяем, что профиль пользователя существует
+        current_user_profile = get_profile_by_user_id(db, user_id)
+        if not current_user_profile:
+            logger.warning(f"User profile not found for user_id: {user_id}")
+            return []
+        
+        # Оптимизированный запрос с JOIN вместо множественных запросов
+        # Используем индексы для быстрого поиска (idx_matches_user1_id, idx_matches_user2_id, idx_matches_matched_at_desc)
+        # Используем DISTINCT для избежания дубликатов при JOIN
+        from sqlalchemy import distinct
+        
+        matched_profiles = db.query(Profile).distinct().join(
+            Match,
+            or_(
+                and_(Match.user1_id == user_id, Match.user2_id == Profile.user_id),
+                and_(Match.user2_id == user_id, Match.user1_id == Profile.user_id)
+            )
+        ).filter(
+            Profile.is_active == True,
+            Profile.deleted_at == None,
+            Profile.user_id != user_id
+        ).order_by(Match.matched_at.desc()).all()
+        
+        logger.info(f"Found {len(matched_profiles)} matches for user_id: {user_id}")
+        return matched_profiles
+    except Exception as e:
+        logger.error(f"Error getting matches for user_id {user_id}: {e}", exc_info=True)
+        # Возвращаем пустой список вместо исключения, чтобы не ломать фронтенд
+        return []

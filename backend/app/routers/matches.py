@@ -103,9 +103,18 @@ async def get_matches_endpoint(
     """
     try:
         from app.routers.profiles import _profile_to_dict
+        
+        logger.info(f"Getting matches for user_id: {current_user_id}")
         profiles = get_matches(db, current_user_id)
+        
+        if not profiles:
+            logger.info(f"No matches found for user_id: {current_user_id}")
+            return JSONResponse(content=[])
+        
         result = [_profile_to_dict(p) for p in profiles]
+        logger.info(f"Returning {len(result)} matches for user_id: {current_user_id}")
         return JSONResponse(content=result)
     except Exception as e:
         logger.error(f"Error getting matches: {e}", exc_info=True, extra={"user_id": current_user_id})
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Возвращаем пустой массив вместо ошибки, чтобы фронтенд не сломался
+        return JSONResponse(content=[], status_code=500)

@@ -203,7 +203,8 @@ const NetListPage = () => {
         }, 5000)
         
         // Используем endpoint для получения мэтчей (взаимных лайков)
-        const url = `${API_ENDPOINTS.MATCHES}?user_id=${userId}`
+        // user_id передаётся через токен авторизации, не через query параметр
+        const url = API_ENDPOINTS.MATCHES
         
         const token = getAuthToken()
         const headers = {
@@ -237,12 +238,25 @@ const NetListPage = () => {
         if (response.ok) {
           const data = await response.json()
           
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:237',message:'Response received',data:{fetchId,requestId,isArray:Array.isArray(data),dataType:typeof data,dataLength:Array.isArray(data)?data.length:'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          
           if (!Array.isArray(data)) {
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:240',message:'Response is not array',data:{fetchId,requestId,dataType:typeof data,data:JSON.stringify(data).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             setMatchedProfiles([])
             setLoading(false)
             hasLoadedRef.current = true
             lastUserIdRef.current = userId
             return
+          }
+          
+          if (data.length === 0) {
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:250',message:'Empty matches array from server',data:{fetchId,requestId,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
           }
           
           // #region agent log
@@ -287,6 +301,10 @@ const NetListPage = () => {
             lastUserIdRef.current = userId
           }
         } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:289',message:'Response not OK',data:{fetchId,requestId,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+          
           if (isMounted) {
             // При ошибке используем кэш, если он есть (даже если истёк)
             const cacheKey = `matches_${userId}`
