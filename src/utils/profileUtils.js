@@ -44,3 +44,4 @@ export const processProfiles = (profiles) => {
   if (!Array.isArray(profiles)) return []
   return profiles.map(processProfile).filter(Boolean)
 }
+

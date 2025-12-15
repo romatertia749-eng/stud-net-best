@@ -73,3 +73,4 @@ DROP INDEX IF EXISTS idx_matches_matched_at_desc;
 - Добавлен явный `QueuePool`
 
 Эти изменения применяются автоматически при следующем деплое бэкенда.
+
