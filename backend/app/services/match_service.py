@@ -213,10 +213,8 @@ def get_matches(db: Session, user_id: int) -> List[Profile]:
         
         # Оптимизированный запрос с JOIN вместо множественных запросов
         # Используем индексы для быстрого поиска (idx_matches_user1_id, idx_matches_user2_id, idx_matches_matched_at_desc)
-        # Используем DISTINCT для избежания дубликатов при JOIN
-        from sqlalchemy import distinct
-        
-        matched_profiles = db.query(Profile).distinct().join(
+        # DISTINCT не используем, чтобы избежать конфликта с ORDER BY в Postgres
+        matched_profiles = db.query(Profile).join(
             Match,
             or_(
                 and_(Match.user1_id == user_id, Match.user2_id == Profile.user_id),
