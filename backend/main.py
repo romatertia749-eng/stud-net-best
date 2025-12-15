@@ -11,6 +11,8 @@ FastAPI Backend для StudNet - приложения нетворкинга
 
 import sys
 import re
+import time
+from collections import deque
 
 # Подавляем предупреждения ImageKit
 class FilteredStderr:
@@ -38,6 +40,7 @@ sys.stderr = FilteredStderr(sys.stderr)
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -59,6 +62,14 @@ app = FastAPI(
     description="Backend API для приложения нетворкинга StudNet",
     version="1.0.0"
 )
+
+# Сбор простой статистики по латентности
+LATENCIES = deque(maxlen=200)
+LATENCY_LOG_EVERY = 50
+LATENCY_COUNTER = 0
+
+# GZip сжатие ответов
+app.add_middleware(GZipMiddleware, minimum_size=512)
 
 # Обработчик ошибок валидации (422)
 @app.exception_handler(RequestValidationError)
@@ -83,10 +94,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": str(exc.body) if hasattr(exc, 'body') else None}
     )
 
-# Middleware для логирования заголовков
+# Middleware для логирования и латентности
 @app.middleware("http")
 async def log_headers_middleware(request: Request, call_next):
     url_str = str(request.url)
+    start = time.perf_counter()
     
     # Логируем POST /api/profiles
     if request.method == "POST" and "/api/profiles" in url_str:
@@ -111,12 +123,28 @@ async def log_headers_middleware(request: Request, call_next):
         logger.info(f"   Headers: {dict(request.headers)}")
     
     response = await call_next(request)
-    
+    duration_ms = (time.perf_counter() - start) * 1000
+
     # Логируем ответ для incoming-likes
     if request.method == "GET" and "/api/profiles/incoming-likes" in url_str:
         print(f"📤 [MIDDLEWARE] Response status: {response.status_code}")
         logger = logging.getLogger(__name__)
         logger.info(f"📤 [MIDDLEWARE] Response status: {response.status_code}")
+
+    # Запись метрик латентности
+    global LATENCY_COUNTER
+    LATENCIES.append(duration_ms)
+    LATENCY_COUNTER += 1
+    if LATENCY_COUNTER % LATENCY_LOG_EVERY == 0 and LATENCIES:
+        sorted_lat = sorted(LATENCIES)
+        p50 = sorted_lat[int(0.5 * (len(sorted_lat) - 1))]
+        p95 = sorted_lat[int(0.95 * (len(sorted_lat) - 1))]
+        logger = logging.getLogger("latency")
+        logger.info(f"latency path={request.url.path} p50={p50:.1f}ms p95={p95:.1f}ms samples={len(sorted_lat)}")
+
+    # Добавляем кэш для статики /uploads
+    if request.url.path.startswith("/uploads"):
+        response.headers.setdefault("Cache-Control", "public, max-age=86400, immutable")
     
     return response
 

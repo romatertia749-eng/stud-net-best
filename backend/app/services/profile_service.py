@@ -40,29 +40,24 @@ def get_profiles_for_swipe(db: Session, user_id: int, page: int = 0, size: int =
         Swipe.user_id == user_id
     ).subquery()
     
-    # Получаем user_id пользователей, с которыми есть мэтч
+    # Получаем ID профилей мэтчей одним запросом через JOIN (оптимизация: вместо 2 запросов - 1)
     # Мэтч может быть где user1_id = user_id или user2_id = user_id
-    matched_user_ids_1 = db.query(Match.user2_id).filter(Match.user1_id == user_id).all()
-    matched_user_ids_2 = db.query(Match.user1_id).filter(Match.user2_id == user_id).all()
-    matched_user_ids = [row[0] for row in matched_user_ids_1] + [row[0] for row in matched_user_ids_2]
-    
-    # Получаем ID профилей мэтчей (не user_id, а profile.id)
-    matched_profile_ids = []
-    if matched_user_ids:
-        matched_profiles = db.query(Profile.id).filter(Profile.user_id.in_(matched_user_ids)).all()
-        matched_profile_ids = [p[0] for p in matched_profiles]
+    matched_profile_ids_subq = db.query(Profile.id).join(
+        Match,
+        or_(
+            and_(Match.user1_id == user_id, Match.user2_id == Profile.user_id),
+            and_(Match.user2_id == user_id, Match.user1_id == Profile.user_id)
+        )
+    ).subquery()
     
     # Получаем профили, которые ещё не были свайпнуты и не являются мэтчами
     query = db.query(Profile).filter(
         Profile.is_active == True,
         Profile.deleted_at == None,
         Profile.user_id != user_id,
-        ~Profile.id.in_(swiped_profile_ids)
+        ~Profile.id.in_(swiped_profile_ids),
+        ~Profile.id.in_(db.query(matched_profile_ids_subq.c.id))
     )
-    
-    # Исключаем мэтчи, если они есть
-    if matched_profile_ids:
-        query = query.filter(~Profile.id.in_(matched_profile_ids))
     
     profiles = query.order_by(Profile.created_at.desc()).offset(page * size).limit(size).all()
     

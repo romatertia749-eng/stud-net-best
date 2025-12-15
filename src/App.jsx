@@ -1,13 +1,16 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { WebAppProvider, useWebApp } from './contexts/WebAppContext'
 import { MatchProvider } from './contexts/MatchContext'
 import { Header, Card, BottomNav, Loader } from './components'
 import HomePage from './pages/HomePage'
 import ProfilePage from './pages/ProfilePage'
-import ProfilesPage from './pages/ProfilesPage'
-import NetListPage from './pages/NetListPage'
-import ProfileEditPage from './pages/ProfileEditPage'
 import UserCardPage from './pages/UserCardPage'
+
+// Lazy loading для тяжелых страниц
+const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
+const NetListPage = lazy(() => import('./pages/NetListPage'))
+const ProfileEditPage = lazy(() => import('./pages/ProfileEditPage'))
 
 /**
  * Компонент экрана ошибки авторизации
@@ -63,17 +66,19 @@ const AppContent = () => {
         )}
         <Header appName="StudNet" connectionsCount={0} statusText="Один в поле" />
         {/* Роутинг приложения */}
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/profile/edit" element={<ProfileEditPage />} />
-          <Route path="/ankets" element={<ProfilesPage />} />
-          <Route path="/profiles" element={<ProfilesPage />} />
-          <Route path="/user/:id" element={<UserCardPage />} />
-          <Route path="/netlist" element={<NetListPage />} />
-          <Route path="/network" element={<NetListPage />} />
-          <Route path="*" element={<HomePage />} /> {/* Fallback на главную */}
-        </Routes>
+        <Suspense fallback={<Loader />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/edit" element={<ProfileEditPage />} />
+            <Route path="/ankets" element={<ProfilesPage />} />
+            <Route path="/profiles" element={<ProfilesPage />} />
+            <Route path="/user/:id" element={<UserCardPage />} />
+            <Route path="/netlist" element={<NetListPage />} />
+            <Route path="/network" element={<NetListPage />} />
+            <Route path="*" element={<HomePage />} /> {/* Fallback на главную */}
+          </Routes>
+        </Suspense>
         <BottomNav />
       </div>
     </Router>

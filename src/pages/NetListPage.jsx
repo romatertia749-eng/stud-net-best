@@ -100,9 +100,6 @@ const NetListPage = () => {
       try {
         const cachedData = JSON.parse(cached)
         if (cachedData.expires > Date.now() && Array.isArray(cachedData.matches)) {
-          // #region agent log
-          const perfStart = performance.now()
-          // #endregion
           const processedMatches = processProfiles(cachedData.matches)
           const formattedMatches = processedMatches.map((profile) => ({
             id: profile?.id,
@@ -117,9 +114,6 @@ const NetListPage = () => {
             photos: profile.photos || [],
             username: profile?.username || null,
           })).filter(match => match !== null)
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:92',message:'Cache loaded for matches',data:{time:performance.now()-perfStart,count:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-          // #endregion
           setMatchedProfiles(formattedMatches)
           hasLoadedRef.current = true
           lastUserIdRef.current = user.id
@@ -150,7 +144,6 @@ const NetListPage = () => {
 
     const fetchMatches = async () => {
       activeRequestsRef.current += 1
-      const requestId = activeRequestsRef.current
       
       // Проверяем кэш перед запросом (внутри функции для доступа к userId)
       const cacheKey = `matches_${userId}`
@@ -164,9 +157,6 @@ const NetListPage = () => {
             hasValidCache = true
             // Если данные уже в состоянии, не делаем запрос
             if (matchedProfiles.length > 0) {
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:133',message:'Skipping fetch - matches already loaded',data:{userId,matchesCount:matchedProfiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-              // #endregion
               activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
               return
             }
@@ -175,12 +165,6 @@ const NetListPage = () => {
           localStorage.removeItem(cacheKey)
         }
       }
-      
-      // #region agent log
-      const fetchStart = performance.now()
-      const fetchId = Math.random().toString(36).substr(2, 9)
-      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:150',message:'fetchMatches started',data:{fetchId,requestId,activeRequests:activeRequestsRef.current,hasCache:hasValidCache},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       if (!isMounted) {
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
@@ -196,9 +180,6 @@ const NetListPage = () => {
         controller = new AbortController()
         // Ограничиваем таймаут до 5 секунд
         timeoutId = setTimeout(() => {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:135',message:'Request timeout (5s)',data:{fetchId,requestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
           controller.abort()
         }, 5000)
         
@@ -215,10 +196,6 @@ const NetListPage = () => {
           headers['Authorization'] = `Bearer ${token}`
         }
         
-        // #region agent log
-        const requestStart = performance.now()
-        // #endregion
-        
         const response = await fetch(url, {
           signal: controller.signal,
           headers,
@@ -229,39 +206,18 @@ const NetListPage = () => {
           timeoutId = null
         }
         
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:157',message:'Network request time',data:{fetchId,requestId,time:performance.now()-requestStart,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         if (!isMounted) return
         
         if (response.ok) {
           const data = await response.json()
           
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:237',message:'Response received',data:{fetchId,requestId,isArray:Array.isArray(data),dataType:typeof data,dataLength:Array.isArray(data)?data.length:'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-          
           if (!Array.isArray(data)) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:240',message:'Response is not array',data:{fetchId,requestId,dataType:typeof data,data:JSON.stringify(data).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             setMatchedProfiles([])
             setLoading(false)
             hasLoadedRef.current = true
             lastUserIdRef.current = userId
             return
           }
-          
-          if (data.length === 0) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:250',message:'Empty matches array from server',data:{fetchId,requestId,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-          }
-          
-          // #region agent log
-          const processStart = performance.now()
-          // #endregion
           
           // Преобразуем данные из API в формат для отображения
           const processedProfiles = processProfiles(data)
@@ -278,10 +234,6 @@ const NetListPage = () => {
             photos: profile.photos || [],
             username: profile?.username || null,
           })).filter(match => match !== null)
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:157',message:'Profile processing time',data:{fetchId,time:performance.now()-processStart,count:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           
           if (isMounted) {
             setMatchedProfiles(formattedMatches)
@@ -301,10 +253,6 @@ const NetListPage = () => {
             lastUserIdRef.current = userId
           }
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:289',message:'Response not OK',data:{fetchId,requestId,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
-          
           if (isMounted) {
             // При ошибке используем кэш, если он есть (даже если истёк)
             const cacheKey = `matches_${userId}`
@@ -327,9 +275,6 @@ const NetListPage = () => {
                     photos: profile.photos || [],
                     username: profile?.username || null,
                   })).filter(match => match !== null)
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:290',message:'Using cache after error',data:{fetchId,matchesCount:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                // #endregion
                   setMatchedProfiles(formattedMatches)
                   hasLoadedRef.current = true
                   lastUserIdRef.current = userId
@@ -381,9 +326,6 @@ const NetListPage = () => {
                   photos: profile.photos || [],
                   username: profile?.username || null,
                 })).filter(match => match !== null)
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:330',message:'Using cache after timeout',data:{fetchId,matchesCount:formattedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                // #endregion
                 setMatchedProfiles(formattedMatches)
                 hasLoadedRef.current = true
                 lastUserIdRef.current = userId
@@ -411,10 +353,6 @@ const NetListPage = () => {
           timeoutId = null
         }
         activeRequestsRef.current = Math.max(0, activeRequestsRef.current - 1)
-        // #region agent log
-        const totalTime = performance.now() - fetchStart
-        fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:250',message:'fetchMatches completed',data:{fetchId,requestId,time:totalTime,activeRequests:activeRequestsRef.current,matchesCount:matchedProfiles.length,exceeded5s:totalTime>5000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         if (isMounted) {
           setLoading(false)
         }
@@ -424,9 +362,6 @@ const NetListPage = () => {
     fetchMatches()
     
     return () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:245',message:'useEffect cleanup',data:{activeRequests:activeRequestsRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       isMounted = false
       if (timeoutId) {
         clearTimeout(timeoutId)
@@ -442,9 +377,6 @@ const NetListPage = () => {
   // Используем данные из контекста, если они есть и локальные данные пусты
   useEffect(() => {
     if (contextMatches && contextMatches.length > 0 && matchedProfiles.length === 0 && !loading) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/05937843-9d7c-4110-8486-1c59eea1887d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NetListPage.jsx:276',message:'Using context matches',data:{matchesCount:contextMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
       setMatchedProfiles(contextMatches)
     }
   }, [contextMatches, matchedProfiles.length, loading])
